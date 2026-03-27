@@ -30,17 +30,14 @@ const Orders = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /* ===============================
-     STATUS BADGE
-  =============================== */
-
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
       PENDING: "bg-yellow-500",
       CONFIRMED: "bg-blue-500",
       PREPARING: "bg-orange-500",
       READY: "bg-gray-500",
-      OUT_FOR_DELIVERY: "bg-purple-600",
+      COMPLETED: "bg-green-600", 
+      OUT_FOR_DELIVERY: "bg-purple-600", 
       DELIVERED: "bg-green-600",
       CANCELLED: "bg-red-600",
       REFUND_REQUESTED: "bg-orange-600",
@@ -58,11 +55,6 @@ const Orders = () => {
       </span>
     );
   };
-
-  /* ===============================
-     FETCH ORDERS
-  =============================== */
-
   const fetchOrders = async (url?: string) => {
 
     if (!user) return;
@@ -89,7 +81,7 @@ const Orders = () => {
 
     } catch (err) {
 
-      console.error("Orders fetch error:", err);
+      console.error(" Orders fetch error:", err);
       setError("Failed to fetch orders");
 
     } finally {
@@ -105,11 +97,6 @@ const Orders = () => {
       fetchOrders();
     }
   }, [user]);
-
-  /* ===============================
-     UI STATES
-  =============================== */
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -139,11 +126,6 @@ const Orders = () => {
       </div>
     );
   }
-
-  /* ===============================
-     UI
-  =============================== */
-
   return (
     <div className="min-h-screen bg-[#f3e5d8] py-12 px-6">
 

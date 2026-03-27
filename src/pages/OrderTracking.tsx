@@ -15,9 +15,6 @@ export default function OrderTracking() {
   const [error, setError] = useState<string | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
-
-  /* ================= INITIAL FETCH ================= */
-
   useEffect(() => {
 
     const fetchData = async () => {
@@ -31,6 +28,11 @@ export default function OrderTracking() {
 
         const token = await getToken();
 
+        if (!token) {
+          console.error(" No token");
+          return;
+        }
+
         const res = await fetch(
           `${API_BASE}/api/orders/tracking/${orderId}/`,
           {
@@ -40,16 +42,26 @@ export default function OrderTracking() {
           }
         );
 
-        if (!res.ok) throw new Error("Failed to fetch tracking");
+        const text = await res.text();
 
-        const result = await res.json();
+        let result: any;
+
+        try {
+          result = text ? JSON.parse(text) : null;
+        } catch {
+          result = null;
+        }
+
+        if (!res.ok) {
+          throw new Error(result?.message || "Failed to fetch tracking");
+        }
 
         console.log("Initial data:", result);
         setData(result);
 
       } catch (err) {
 
-        console.error(err);
+        console.error(" Fetch error:", err);
         setError("Failed to load tracking");
 
       } finally {
@@ -62,63 +74,70 @@ export default function OrderTracking() {
     fetchData();
 
   }, [orderId, getToken, isLoaded]);
-
-  /* ================= WEBSOCKET ================= */
-
   useEffect(() => {
 
     if (!orderId) return;
 
-    const socket = new WebSocket(`${WS_BASE}/ws/orders/${orderId}/`);
-    socketRef.current = socket;
+    let socket: WebSocket | null = null;
 
-    socket.onopen = () => {
-      console.log("✅ WebSocket connected");
-    };
+    const connect = () => {
+      socket = new WebSocket(`${WS_BASE}/ws/orders/${orderId}/`);
+      socketRef.current = socket;
 
-    socket.onmessage = (event) => {
+      socket.onopen = () => {
+        console.log(" WebSocket connected");
+      };
 
-      const msg = JSON.parse(event.data);
+      socket.onmessage = (event) => {
 
-      console.log("Realtime update:", msg);
+        let msg: any;
 
-      setData((prev: any) => {
-        if (!prev) return prev;
-
-        // ORDER STATUS
-        if (msg.type === "order_status") {
-          return { ...prev, order_status: msg.status };
+        try {
+          msg = JSON.parse(event.data);
+        } catch {
+          console.error("Invalid WS message");
+          return;
         }
 
-        // LOCATION UPDATE
-        if (msg.type === "location_update") {
-          return {
-            ...prev,
-            latitude: msg.latitude,
-            longitude: msg.longitude,
-          };
-        }
+        console.log("Realtime update:", msg);
 
-        return prev;
-      });
+        setData((prev: any) => {
+          if (!prev) return prev;
+          if (msg.type === "order_status") {
+            return {
+              ...prev,
+              order_status: msg.status,
+            };
+          }
+          if (msg.type === "location_update") {
+            return {
+              ...prev,
+              latitude: msg.latitude,
+              longitude: msg.longitude,
+            };
+          }
+
+          return prev;
+        });
+      };
+
+      socket.onerror = (err) => {
+        console.error(" WebSocket error:", err);
+      };
+
+      socket.onclose = () => {
+        console.log("🔌 WebSocket closed, reconnecting...");
+        setTimeout(connect, 3000); 
+      };
     };
 
-    socket.onerror = (err) => {
-      console.error("❌ WebSocket error:", err);
-    };
-
-    socket.onclose = () => {
-      console.log("🔌 WebSocket closed");
-    };
+    connect();
 
     return () => {
-      socket.close();
+      socket?.close();
     };
 
   }, [orderId]);
-
-  /* ================= STATES ================= */
-
   if (!isLoaded || loading) {
     return <p className="p-6">Loading tracking...</p>;
   }
@@ -130,9 +149,6 @@ export default function OrderTracking() {
   if (!data) {
     return <p className="p-6">No tracking data</p>;
   }
-
-  /* ================= UI ================= */
-
   return (
 
     <div className="p-6 space-y-4">
@@ -144,7 +160,8 @@ export default function OrderTracking() {
       <div className="space-y-2">
 
         <p><strong>Order Status:</strong> {data.order_status}</p>
-        <p><strong>Delivery Status:</strong> {data.delivery_status}</p>
+
+        <p><strong>Delivery Status:</strong> {data.delivery_status || "-"}</p>
 
         <p><strong>Assigned At:</strong> {data.assigned_at || "-"}</p>
         <p><strong>Picked Up At:</strong> {data.picked_up_at || "-"}</p>

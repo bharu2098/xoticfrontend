@@ -27,16 +27,12 @@ const Transactions = () => {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
-
-  /* ============================
-     FETCH TRANSACTIONS
-  ============================ */
-
   const fetchTransactions = async (url?: string) => {
 
     if (!user) return;
 
     try {
+      if (!url) setLoading(true);
 
       const endpoint = url
         ? url.replace("http://127.0.0.1:8000/api", "")
@@ -45,14 +41,16 @@ const Transactions = () => {
       const data: PaginatedResponse = await apiRequest(endpoint);
 
       setTransactions((prev) =>
-        url ? [...prev, ...(data.results || [])] : (data.results || [])
+        url
+          ? [...prev, ...(data.results || [])]
+          : (data.results || [])
       );
 
       setNextPage(data.next || null);
 
     } catch (err) {
 
-      console.error("Transaction fetch error:", err);
+      console.error(" Transaction fetch error:", err);
       setError("Failed to load transactions");
 
     } finally {
@@ -66,11 +64,6 @@ const Transactions = () => {
   useEffect(() => {
     fetchTransactions();
   }, [user]);
-
-  /* ============================
-     LOAD MORE
-  ============================ */
-
   const loadMore = () => {
 
     if (!nextPage || loadingMore) return;
@@ -78,21 +71,11 @@ const Transactions = () => {
     setLoadingMore(true);
     fetchTransactions(nextPage);
   };
-
-  /* ============================
-     STYLES
-  ============================ */
-
   const getTypeStyle = (type: string) => {
     if (type === "CREDIT") return "text-green-600";
     if (type === "DEBIT") return "text-red-600";
     return "text-[#4e342e]";
   };
-
-  /* ============================
-     LOADING
-  ============================ */
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -102,11 +85,6 @@ const Transactions = () => {
       </div>
     );
   }
-
-  /* ============================
-     ERROR
-  ============================ */
-
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -116,11 +94,6 @@ const Transactions = () => {
       </div>
     );
   }
-
-  /* ============================
-     EMPTY
-  ============================ */
-
   if (!transactions.length) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -130,18 +103,13 @@ const Transactions = () => {
       </div>
     );
   }
-
-  /* ============================
-     UI
-  ============================ */
-
   return (
     <div className="min-h-screen bg-[#f3e5d8] py-12 px-6">
 
       <div className="max-w-5xl mx-auto">
 
         <h1 className="text-3xl font-bold text-[#4e342e] mb-10">
-          Transaction History 💳
+          Transaction History 
         </h1>
 
         <div className="space-y-5">

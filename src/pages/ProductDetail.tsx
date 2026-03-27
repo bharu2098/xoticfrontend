@@ -18,11 +18,6 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  /* ========================================
-     FETCH PRODUCT
-  ======================================== */
-
   useEffect(() => {
 
     const loadProduct = async () => {
@@ -46,7 +41,7 @@ export default function ProductDetail() {
 
       } catch (err) {
 
-        console.error("Product fetch error:", err);
+        console.error(" Product fetch error:", err);
         setError("Failed to load product");
 
       } finally {
@@ -59,11 +54,6 @@ export default function ProductDetail() {
     loadProduct();
 
   }, [id]);
-
-  /* ========================================
-     STATES
-  ======================================== */
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -90,17 +80,8 @@ export default function ProductDetail() {
       </div>
     );
   }
-
-  /* ========================================
-     PRICE
-  ======================================== */
-
   const price = Number(product.price) || 0;
   const totalPrice = price * quantity;
-
-  /* ========================================
-     ADD TO CART
-  ======================================== */
 
   const addToCart = async () => {
 
@@ -128,7 +109,7 @@ export default function ProductDetail() {
 
     } catch (err: any) {
 
-      console.error("Cart error:", err);
+      console.error(" Cart error:", err);
       alert(err?.message || "Failed to add to cart");
 
     } finally {
@@ -137,18 +118,11 @@ export default function ProductDetail() {
 
     }
   };
-
-  /* ========================================
-     UI
-  ======================================== */
-
   return (
 
     <div className="min-h-screen bg-[#f3e5d8] py-12 px-6">
 
       <div className="max-w-6xl mx-auto">
-
-        {/* BACK */}
         <button
           onClick={() => navigate(-1)}
           className="mb-6 text-sm font-semibold text-[#6d4c41] hover:underline"
@@ -157,14 +131,13 @@ export default function ProductDetail() {
         </button>
 
         <div className="grid gap-10 p-8 bg-white shadow-xl rounded-3xl md:grid-cols-2">
-
-          {/* IMAGE */}
           <div className="flex items-center justify-center">
 
             {product.image ? (
               <img
                 src={product.image}
                 alt={product.name}
+                loading="lazy" 
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).src =
                     "https://via.placeholder.com/400x300?text=No+Image";
@@ -178,8 +151,6 @@ export default function ProductDetail() {
             )}
 
           </div>
-
-          {/* INFO */}
           <div className="flex flex-col justify-between">
 
             <div>
@@ -195,15 +166,11 @@ export default function ProductDetail() {
               <p className="mt-6 text-[#5d4037]">
                 {product.description || "No description available"}
               </p>
-
-              {/* PRICE */}
               <div className="flex items-center gap-4 mt-8">
                 <span className="text-3xl font-bold">
                   ₹ {price}
                 </span>
               </div>
-
-              {/* QUANTITY */}
               <div className="flex items-center gap-6 mt-8">
 
                 <span className="font-semibold">Quantity:</span>
@@ -235,15 +202,11 @@ export default function ProductDetail() {
                 </div>
 
               </div>
-
-              {/* TOTAL */}
               <div className="mt-6 text-lg font-bold">
                 Total: ₹ {totalPrice}
               </div>
 
             </div>
-
-            {/* BUTTON */}
             <button
               onClick={addToCart}
               disabled={adding || quantity <= 0}

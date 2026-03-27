@@ -29,26 +29,17 @@ interface DashboardData {
     cancellation_rate_percent: number;
   };
 }
-
 const KitchenDashboard = () => {
-
   const { user, isKitchenStaff } = useAuthContext();
   const navigate = useNavigate();
-
   const [data, setData] = useState<DashboardData | null>(null);
   const [range, setRange] = useState("weekly");
   const [loadingStatus, setLoadingStatus] = useState(false);
-  const [loading, setLoading] = useState(true); // ✅ ADDED
-
-  // =====================================================
-  // AUTH GUARD (FIXED)
-  // =====================================================
-
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
 
     if (!user) return;
 
-    // ❌ block NON kitchen users
     if (!isKitchenStaff) {
       navigate("/", { replace: true });
     }
@@ -56,55 +47,48 @@ const KitchenDashboard = () => {
   }, [user, isKitchenStaff, navigate]);
 
   if (!user) return null;
+  const loadDashboard = async () => {
 
-  // =====================================================
-  // LOAD DASHBOARD
-  // =====================================================
+    try {
 
-  useEffect(() => {
+      setLoading(true);
 
-    if (!user) return;
-
-    const loadDashboard = async () => {
-
-      try {
-
-        setLoading(true);
-
-        const res = await getKitchenDashboard(range);
-
-        setData(res || null);
-
-      } catch (error) {
-
-        console.error("Failed to load dashboard", error);
-        setData(null);
-
-      } finally {
-
-        setLoading(false);
-
+      const res = await getKitchenDashboard(range);
+      if (!res || typeof res !== "object") {
+        throw new Error("Invalid dashboard response");
       }
 
-    };
+      setData(res);
 
-    loadDashboard();
+    } catch (error) {
 
+      console.error(" Failed to load dashboard:", error);
+      setData(null);
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
+  };
+
+  useEffect(() => {
+    if (user) loadDashboard();
   }, [range, user]);
-
-  // =====================================================
-  // UPDATE STATUS
-  // =====================================================
 
   const handleStatusChange = async (status: DashboardData["status"]) => {
 
     if (!data || data.status === status || loadingStatus) return;
 
-    setLoadingStatus(true);
-
     try {
 
+      setLoadingStatus(true);
+
       const res = await updateKitchenStatus(status);
+      if (!res || !res.status) {
+        throw new Error("Invalid status response");
+      }
 
       setData((prev) =>
         prev ? { ...prev, status: res.status } : prev
@@ -112,7 +96,7 @@ const KitchenDashboard = () => {
 
     } catch (error) {
 
-      console.error(error);
+      console.error(" Status update error:", error);
       alert("Failed to update status");
 
     } finally {
@@ -122,7 +106,6 @@ const KitchenDashboard = () => {
     }
 
   };
-
   const getStatusColor = (status: string) => {
 
     switch (status) {
@@ -144,11 +127,6 @@ const KitchenDashboard = () => {
     }
 
   };
-
-  // =====================================================
-  // LOADING STATE (ADDED)
-  // =====================================================
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -166,18 +144,11 @@ const KitchenDashboard = () => {
       </div>
     );
   }
-
-  // =====================================================
-  // UI
-  // =====================================================
-
   return (
 
     <div className="min-h-screen bg-[#f3e5d8] py-10 px-6">
 
       <div className="mx-auto max-w-7xl">
-
-        {/* HEADER */}
 
         <div className="flex flex-col gap-6 mb-10 md:flex-row md:justify-between md:items-center">
 
@@ -238,15 +209,11 @@ const KitchenDashboard = () => {
 
         </div>
 
-        {/* TODAY */}
-
         <div className="grid grid-cols-1 gap-6 mb-8 sm:grid-cols-3">
           <Card title="Today's Orders" value={data.today.orders} />
           <Card title="Today's Completed" value={data.today.completed} />
           <Card title="Today's Revenue" value={`₹ ${data.today.revenue}`} />
         </div>
-
-        {/* RANGE */}
 
         <div className="flex flex-wrap gap-3 mb-8">
 
@@ -268,8 +235,6 @@ const KitchenDashboard = () => {
 
         </div>
 
-        {/* REVENUE */}
-
         <div className="bg-gradient-to-r from-[#6d4c41] to-[#4e342e] text-white p-8 rounded-3xl shadow-lg mb-10">
 
           <p className="text-sm opacity-80">
@@ -281,8 +246,6 @@ const KitchenDashboard = () => {
           </h2>
 
         </div>
-
-        {/* ANALYTICS */}
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
 
@@ -306,7 +269,6 @@ const KitchenDashboard = () => {
   );
 
 };
-
 const Card = ({ title, value }: any) => (
 
   <div className="p-6 transition bg-white shadow-md rounded-3xl hover:shadow-lg">

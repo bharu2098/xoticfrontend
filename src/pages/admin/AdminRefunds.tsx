@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/clerk-react";
 
-const API_BASE = "http://127.0.0.1:8000/api/orders/admin/refunds";
+const API_ROOT =
+  import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
+
+const REFUND_API = `${API_ROOT}/api/orders/admin/refunds`;
 
 interface Refund {
   id: number;
@@ -22,7 +25,7 @@ interface PaginatedResponse<T> {
 
 export default function AdminRefunds() {
 
-  const { getToken, isLoaded } = useAuth();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
 
   const [refunds, setRefunds] = useState<Refund[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,126 +35,126 @@ export default function AdminRefunds() {
   const [count, setCount] = useState(0);
 
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const pageSize = 10;
+
+  /* ================= AUTH FETCH ================= */
+
+  const authFetch = async (url: string, options: RequestInit = {}) => {
+    if (!isLoaded || !isSignedIn) return null;
+
+    try {
+      const token = await getToken(); // ✅ FIXED (no template)
+
+      if (!token) return null;
+
+      return await fetch(url, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+    } catch (err) {
+      console.error("Auth fetch error:", err);
+      return null;
+    }
+  };
 
   /* ================= FETCH ================= */
 
   const fetchRefunds = async () => {
 
     try {
-
       setLoading(true);
+      setError(null);
 
-      const token = await getToken();
-
-      const res = await fetch(
-        `${API_BASE}/?page=${page}&search=${search}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const res = await authFetch(
+        `${REFUND_API}/?page=${page}&search=${search}`
       );
 
-      if (!res.ok) throw new Error("Failed to load refunds");
+      if (!res) throw new Error("Server unreachable");
 
-      const data: PaginatedResponse<Refund> = await res.json();
+      const text = await res.text();
 
-      setRefunds(data.results || []);
-      setCount(data.count || 0);
+      let data: PaginatedResponse<Refund> | null = null;
 
-    } catch (err) {
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        throw new Error("Invalid server response");
+      }
 
+      if (!res.ok) {
+        throw new Error("Failed to load refunds");
+      }
+
+      setRefunds(data?.results || []);
+      setCount(data?.count || 0);
+
+    } catch (err: any) {
       console.error("Refund fetch error:", err);
+      setError(err.message || "Failed to load refunds");
       setRefunds([]);
-
     } finally {
-
       setLoading(false);
-
     }
-
   };
 
   useEffect(() => {
-    if (isLoaded) fetchRefunds();
-  }, [page, search, isLoaded]);
+    if (isLoaded && isSignedIn) {
+      fetchRefunds();
+    }
+  }, [page, search, isLoaded, isSignedIn]);
 
-  /* ================= ACTIONS ================= */
+  /* ================= ACTION ================= */
 
-  const approveRefund = async (id: number) => {
+  const handleAction = async (id: number, type: "approve" | "reject") => {
 
     try {
-
       setProcessingId(id);
+      setError(null);
 
-      const token = await getToken();
+      const res = await authFetch(
+        `${REFUND_API}/${id}/${type}/`,
+        { method: "PATCH" }
+      );
 
-      const res = await fetch(`${API_BASE}/${id}/approve/`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      if (!res) throw new Error("Server unreachable");
 
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        throw new Error(`${type} failed`);
+      }
 
       fetchRefunds();
 
-    } catch {
-
-      alert("Approve failed");
-
+    } catch (err: any) {
+      console.error(`${type} error:`, err);
+      alert(err.message || `${type} failed`);
     } finally {
-
       setProcessingId(null);
-
     }
   };
 
-  const rejectRefund = async (id: number) => {
-
-    try {
-
-      setProcessingId(id);
-
-      const token = await getToken();
-
-      const res = await fetch(`${API_BASE}/${id}/reject/`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!res.ok) throw new Error();
-
-      fetchRefunds();
-
-    } catch {
-
-      alert("Reject failed");
-
-    } finally {
-
-      setProcessingId(null);
-
-    }
-  };
-
-  /* ================= HELPERS ================= */
+  /* ================= STATUS ================= */
 
   const getStatusStyle = (status: string) => {
-    if (status === "REQUESTED") return "text-yellow-600";
-    if (status === "APPROVED") return "text-green-600";
-    if (status === "REJECTED") return "text-red-600";
-    return "text-gray-600";
+    switch (status) {
+      case "REQUESTED":
+        return "text-yellow-600";
+      case "APPROVED":
+        return "text-green-600";
+      case "REJECTED":
+        return "text-red-600";
+      default:
+        return "text-gray-600";
+    }
   };
 
   const totalPages = Math.ceil(count / pageSize);
-
-  /* ================= UI ================= */
 
   if (!isLoaded || loading) {
     return <div className="p-6">Loading refunds...</div>;
@@ -165,7 +168,12 @@ export default function AdminRefunds() {
         Refund Requests
       </h1>
 
-      {/* SEARCH */}
+      {error && (
+        <div className="p-3 mb-4 text-red-700 bg-red-100 rounded-lg">
+          {error}
+        </div>
+      )}
+
       <input
         type="text"
         placeholder="Search order id..."
@@ -177,7 +185,6 @@ export default function AdminRefunds() {
         className="w-full p-3 mb-5 border rounded-lg"
       />
 
-      {/* TABLE */}
       <div className="overflow-hidden bg-white shadow rounded-xl">
 
         <table className="w-full">
@@ -201,7 +208,6 @@ export default function AdminRefunds() {
               <tr key={refund.id} className="border-t">
 
                 <td className="p-3">#{refund.order}</td>
-
                 <td className="p-3">{refund.user}</td>
 
                 <td className="p-3 font-semibold">
@@ -217,12 +223,12 @@ export default function AdminRefunds() {
                   )}
                 </td>
 
-                {/* 🔥 PROOF */}
                 <td className="p-3">
                   {refund.proof ? (
                     <a
                       href={refund.proof}
                       target="_blank"
+                      rel="noreferrer"
                       className="text-blue-600 underline"
                     >
                       View
@@ -239,7 +245,7 @@ export default function AdminRefunds() {
                   {refund.status === "REQUESTED" && (
                     <>
                       <button
-                        onClick={() => approveRefund(refund.id)}
+                        onClick={() => handleAction(refund.id, "approve")}
                         disabled={processingId === refund.id}
                         className="px-3 py-1 text-white bg-green-600 rounded"
                       >
@@ -247,7 +253,7 @@ export default function AdminRefunds() {
                       </button>
 
                       <button
-                        onClick={() => rejectRefund(refund.id)}
+                        onClick={() => handleAction(refund.id, "reject")}
                         disabled={processingId === refund.id}
                         className="px-3 py-1 text-white bg-red-600 rounded"
                       >
@@ -276,7 +282,6 @@ export default function AdminRefunds() {
 
       </div>
 
-      {/* PAGINATION */}
       <div className="flex justify-center gap-4 mt-6">
 
         <button
@@ -302,6 +307,5 @@ export default function AdminRefunds() {
       </div>
 
     </div>
-
   );
 }

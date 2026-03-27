@@ -1,23 +1,11 @@
 import { useEffect, useState, useContext, useCallback } from "react";
 import { AuthContext } from "../../context/AuthContext";
-import { useAuth } from "@clerk/clerk-react"; // ✅ ADDED
-
-/* ================= AUTH TYPE FIX ================= */
-
+import { useAuth } from "@clerk/clerk-react";
 interface AuthContextType {
-  access: string | null;
-  refreshAccessToken: () => Promise<string | null>;
   user?: {
     id?: number;
-    username?: string;
-    email?: string;
   };
 }
-
-const API_BASE =
-  import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
-
-/* ================= TYPES ================= */
 
 interface User {
   id: number;
@@ -31,10 +19,12 @@ interface User {
   is_delivery_partner: boolean;
 }
 
+const API_BASE =
+  import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 export default function AdminUsers() {
 
   const auth = useContext(AuthContext) as AuthContextType | null;
-  const { getToken } = useAuth(); // ✅ CLERK
+  const { getToken, isLoaded, isSignedIn } = useAuth();
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,29 +33,32 @@ export default function AdminUsers() {
   const [prevPage, setPrevPage] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  /* ================= AUTH FETCH (CLERK) ================= */
-
   const authFetch = useCallback(async (url: string, options: RequestInit = {}) => {
 
-    const token = await getToken();
+    if (!isLoaded || !isSignedIn) return null;
 
-    if (!token) return null;
+    try {
 
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        ...(options.headers || {}),
-        Authorization: `Bearer ${token}`,
-      },
-    });
+      const token = await getToken();
 
-    return res;
+      if (!token) return null;
 
-  }, [getToken]);
+      return await fetch(url, {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-  /* ================= FETCH USERS ================= */
+    } catch (err) {
 
+      console.error("Auth fetch error:", err);
+      return null;
+
+    }
+
+  }, [getToken, isLoaded, isSignedIn]);
   const fetchUsers = useCallback(async (pageUrl?: string) => {
 
     try {
@@ -79,11 +72,19 @@ export default function AdminUsers() {
 
       if (!res) throw new Error("Server unreachable");
 
-      if (!res.ok) {
-        throw new Error(`Server error ${res.status}`);
+      const text = await res.text();
+
+      let data: any;
+
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = null;
       }
 
-      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to fetch users");
+      }
 
       setUsers(data?.results || data || []);
       setNextPage(data?.next || null);
@@ -103,11 +104,8 @@ export default function AdminUsers() {
   }, [authFetch]);
 
   useEffect(() => {
-    fetchUsers(); // ✅ FIXED
+    fetchUsers();
   }, [fetchUsers]);
-
-  /* ================= SAFE JSON ================= */
-
   const safeJson = async (res: Response) => {
 
     const text = await res.text();
@@ -119,9 +117,6 @@ export default function AdminUsers() {
     }
 
   };
-
-  /* ================= TOGGLE ROLE ================= */
-
   const toggle = async (id: number, action: string) => {
 
     try {
@@ -149,10 +144,9 @@ export default function AdminUsers() {
           switch (action) {
             case "toggle_active":
               return { ...u, is_active: !u.is_active };
+
             case "toggle_kitchen":
               return { ...u, is_kitchen_staff: !u.is_kitchen_staff };
-            case "toggle_delivery":
-              return { ...u, is_delivery_partner: !u.is_delivery_partner };
             default:
               return u;
           }
@@ -171,15 +165,11 @@ export default function AdminUsers() {
     }
 
   };
-
-  /* ================= SEARCH ================= */
-
   const filteredUsers = users.filter(
     (u) =>
       u.username?.toLowerCase().includes(search.toLowerCase()) ||
       u.email?.toLowerCase().includes(search.toLowerCase())
   );
-
   return (
 
     <div className="p-10">
@@ -199,7 +189,7 @@ export default function AdminUsers() {
         placeholder="Search users..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="w-full p-3 mb-6 border rounded-xl focus:ring-2 focus:ring-[#6d4c41]"
+        className="w-full p-3 mb-6 border rounded-xl"
       />
 
       {loading ? (
@@ -215,7 +205,6 @@ export default function AdminUsers() {
           <table className="w-full">
 
             <thead className="bg-[#f3e5d8] text-[#5a2d0c]">
-
               <tr>
                 <th className="p-4 text-left">User</th>
                 <th>Email</th>
@@ -223,7 +212,6 @@ export default function AdminUsers() {
                 <th>Roles</th>
                 <th className="text-center">Actions</th>
               </tr>
-
             </thead>
 
             <tbody>
@@ -264,43 +252,31 @@ export default function AdminUsers() {
                       {user.is_kitchen_staff && (
                         <RoleBadge color="yellow" label="Kitchen" />
                       )}
-                      {user.is_delivery_partner && (
-                        <RoleBadge color="blue" label="Delivery" />
-                      )}
                     </td>
 
                     <td className="text-center">
 
-                      <div className="flex justify-center gap-2">
+                      {!isSelf && !user.is_superuser && (
 
-                        {!isSelf && !user.is_superuser && (
+                        <div className="flex justify-center gap-2">
 
-                          <>
-                            <ActionButton
-                              updating={updatingId === user.id}
-                              label={user.is_active ? "Block" : "Unblock"}
-                              color="bg-red-600"
-                              onClick={() => toggle(user.id, "toggle_active")}
-                            />
+                          <ActionButton
+                            updating={updatingId === user.id}
+                            label={user.is_active ? "Block" : "Unblock"}
+                            color="bg-red-600"
+                            onClick={() => toggle(user.id, "toggle_active")}
+                          />
 
-                            <ActionButton
-                              updating={updatingId === user.id}
-                              label="Kitchen"
-                              color="bg-yellow-600"
-                              onClick={() => toggle(user.id, "toggle_kitchen")}
-                            />
+                          <ActionButton
+                            updating={updatingId === user.id}
+                            label="Kitchen"
+                            color="bg-yellow-600"
+                            onClick={() => toggle(user.id, "toggle_kitchen")}
+                          />
 
-                            <ActionButton
-                              updating={updatingId === user.id}
-                              label="Delivery"
-                              color="bg-blue-600"
-                              onClick={() => toggle(user.id, "toggle_delivery")}
-                            />
-                          </>
+                        </div>
 
-                        )}
-
-                      </div>
+                      )}
 
                     </td>
 
@@ -340,9 +316,6 @@ export default function AdminUsers() {
     </div>
   );
 }
-
-/* ================= BUTTON ================= */
-
 const ActionButton = ({
   updating,
   onClick,
@@ -357,14 +330,11 @@ const ActionButton = ({
   <button
     disabled={updating}
     onClick={onClick}
-    className={`w-[90px] px-3 py-1 text-sm text-white rounded-lg transition hover:opacity-90 disabled:opacity-50 ${color}`}
+    className={`w-[90px] px-3 py-1 text-sm text-white rounded-lg ${color}`}
   >
     {updating ? "..." : label}
   </button>
 );
-
-/* ================= ROLE BADGE ================= */
-
 const RoleBadge = ({
   color,
   label,
@@ -376,7 +346,6 @@ const RoleBadge = ({
   const colors: Record<string, string> = {
     purple: "bg-purple-100 text-purple-700",
     yellow: "bg-yellow-100 text-yellow-700",
-    blue: "bg-blue-100 text-blue-700",
   };
 
   return (

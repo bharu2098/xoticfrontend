@@ -2,14 +2,10 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 
-/* ================= CONFIG ================= */
-
 const API_ROOT =
   import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 
 const ADMIN_ORDERS_API = `${API_ROOT}/api/orders/admin/orders`;
-
-/* ================= TYPES ================= */
 
 interface OrderItem {
   id?: number;
@@ -27,8 +23,6 @@ interface Order {
   customer_name: string;
   kitchen_name: string;
   status: string;
-  delivery: { status_display: string } | null;
-  delivery_partner: string | null;
   final_amount: string;
   created_at: string;
   items: OrderItem[];
@@ -41,7 +35,7 @@ interface PaginatedResponse {
 
 export default function AdminOrders() {
 
-  const { getToken } = useAuth(); // ✅ CLERK
+  const { getToken } = useAuth();
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<Order[]>([]);
@@ -54,23 +48,35 @@ export default function AdminOrders() {
 
   const pageSize = 10;
 
-  /* ================= AUTH FETCH (CLERK) ================= */
+  /* ================= AUTH FETCH (FIXED) ================= */
 
   const authFetch = useCallback(async (url: string, options: RequestInit = {}) => {
 
-    const token = await getToken();
-    if (!token) return null;
+    try {
+const token = await getToken();
 
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(options.headers || {}),
-        Authorization: `Bearer ${token}`, // ✅ FIXED
-      },
-    });
+      if (!token) {
+        console.warn("No token");
+        return null;
+      }
 
-    return res;
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      return res;
+
+    } catch (err) {
+
+      console.error("Auth fetch error:", err);
+      return null;
+
+    }
 
   }, [getToken]);
 
@@ -79,32 +85,50 @@ export default function AdminOrders() {
   const fetchOrders = useCallback(async () => {
 
     try {
+
       setLoading(true);
 
       const res = await authFetch(
         `${ADMIN_ORDERS_API}/?page=${page}&search=${search}`
       );
 
-      if (!res || !res.ok) return;
+      if (!res) return;
 
-      const data: PaginatedResponse = await res.json();
+      const text = await res.text();
 
-      setOrders(data.results || []);
-      setCount(data.count || 0);
+      let data: PaginatedResponse | null = null;
+
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = null;
+      }
+
+      if (!res.ok) {
+        console.error("API error:", data);
+        return;
+      }
+
+      setOrders(data?.results || []);
+      setCount(data?.count || 0);
 
     } catch (err) {
-      console.error(err);
+
+      console.error("Fetch error:", err);
+
     } finally {
+
       setLoading(false);
+
     }
 
   }, [authFetch, page, search]);
 
   useEffect(() => {
-    fetchOrders(); // ✅ removed auth.access dependency
+    fetchOrders();
   }, [fetchOrders]);
 
-  /* ================= ACTION ================= */
+  /* ================= UPDATE ================= */
 
   const updateStatus = async (id: number, action: string) => {
 
@@ -126,10 +150,15 @@ export default function AdminOrders() {
 
       await fetchOrders();
 
-    } catch {
+    } catch (err) {
+
+      console.error("Update error:", err);
       alert("Error updating order");
+
     } finally {
+
       setProcessingId(null);
+
     }
 
   };
@@ -137,18 +166,35 @@ export default function AdminOrders() {
   /* ================= BADGE ================= */
 
   const badge = (status: string | null) => {
+
     const base = "px-3 py-1 text-xs font-semibold rounded-full";
 
     switch (status) {
-      case "DELIVERED": return `${base} bg-green-100 text-green-800`;
-      case "OUT_FOR_DELIVERY": return `${base} bg-orange-200 text-orange-900`;
-      case "READY": return `${base} bg-indigo-200 text-indigo-900`;
-      case "PREPARING": return `${base} bg-purple-200 text-purple-900`;
-      case "CONFIRMED": return `${base} bg-blue-200 text-blue-900`;
-      case "PENDING": return `${base} bg-yellow-200 text-yellow-900`;
-      case "CANCELLED": return `${base} bg-red-200 text-red-900`;
-      default: return `${base} bg-gray-200`;
+
+      case "COMPLETED":
+      case "DELIVERED":
+        return `${base} bg-green-700 text-white`;
+
+      case "READY":
+        return `${base} bg-indigo-200 text-indigo-900`;
+
+      case "PREPARING":
+        return `${base} bg-purple-200 text-purple-900`;
+
+      case "CONFIRMED":
+        return `${base} bg-blue-200 text-blue-900`;
+
+      case "PENDING":
+        return `${base} bg-yellow-200 text-yellow-900`;
+
+      case "CANCELLED":
+        return `${base} bg-red-200 text-red-900`;
+
+      default:
+        return `${base} bg-gray-200`;
+
     }
+
   };
 
   const totalPages = Math.ceil(count / pageSize);
@@ -171,9 +217,11 @@ export default function AdminOrders() {
         className="w-full p-3 mb-6 border rounded-xl"
       />
 
-      <div className="overflow-hidden bg-[#f4e6dc] rounded-3xl shadow-md">
+      {/* ✅ FIXED: overflow-x-auto */}
+      <div className="overflow-x-auto bg-[#f4e6dc] rounded-3xl shadow-md">
 
-        <table className="w-full text-left">
+        {/* ✅ FIXED: min width */}
+        <table className="w-full min-w-[1000px] text-left">
 
           <thead className="bg-[#e8d2c3] text-[#7a2e00]">
             <tr>
@@ -182,8 +230,6 @@ export default function AdminOrders() {
               <th className="px-6 py-4">Kitchen</th>
               <th className="px-6 py-4">Items</th>
               <th className="px-6 py-4">Status</th>
-              <th className="px-6 py-4">Delivery</th>
-              <th className="px-6 py-4">Partner</th>
               <th className="px-6 py-4 text-right">Final</th>
               <th className="px-6 py-4 text-center">Actions</th>
             </tr>
@@ -226,41 +272,72 @@ export default function AdminOrders() {
                   </span>
                 </td>
 
-                <td className="px-6 py-4">
-                  {order.delivery ? (
-                    <span className={badge(order.delivery.status_display)}>
-                      {order.delivery.status_display}
-                    </span>
-                  ) : "-"}
-                </td>
-
-                <td className="px-6 py-4">
-                  {order.delivery_partner || "-"}
-                </td>
-
                 <td className="px-6 py-4 font-semibold text-right">
                   ₹ {order.final_amount}
                 </td>
 
-                <td className="px-6 py-4 space-x-2 text-center">
+                {/* ✅ FIXED ACTION COLUMN */}
+                <td className="flex flex-wrap justify-center gap-2 px-6 py-4 text-center whitespace-nowrap">
 
-                  {order.status === "OUT_FOR_DELIVERY" && (
-                    <ActionBtn
-                      label="Deliver"
-                      color="bg-green-700"
-                      onClick={() => updateStatus(order.id, "deliver")}
-                      processing={processingId === order.id}
-                    />
-                  )}
+  {/* ✅ ACCEPT */}
+  {order.status === "PENDING" && (
+    <ActionBtn
+      label="Accept"
+      color="bg-blue-600"
+      onClick={() => updateStatus(order.id, "accept")}
+      processing={processingId === order.id}
+    />
+  )}
 
-                  <button
-                    onClick={() => navigate(`/admin/orders/${order.id}`)}
-                    className="px-3 py-2 text-xs text-white bg-[#7a2e00] rounded-lg"
-                  >
-                    View
-                  </button>
+  {/* ✅ REJECT */}
+  {order.status === "PENDING" && (
+    <ActionBtn
+      label="Reject"
+      color="bg-red-600"
+      onClick={() => updateStatus(order.id, "reject")}
+      processing={processingId === order.id}
+    />
+  )}
 
-                </td>
+  {/* ✅ PREPARING / CONFIRMED → READY */}
+  {(order.status === "CONFIRMED" || order.status === "PREPARING") && (
+    <ActionBtn
+      label="Mark Ready"
+      color="bg-purple-600"
+      onClick={() => updateStatus(order.id, "ready")}
+      processing={processingId === order.id}
+    />
+  )}
+
+  {/* ✅ READY → DISPATCH */}
+  {order.status === "READY" && (
+    <ActionBtn
+      label="Dispatch"
+      color="bg-indigo-600"
+      onClick={() => updateStatus(order.id, "dispatch")}
+      processing={processingId === order.id}
+    />
+  )}
+
+  {/* ✅ DISPATCHED → DELIVERED */}
+  {order.status === "OUT_FOR_DELIVERY" && (
+    <ActionBtn
+      label="Delivered"
+      color="bg-green-700"
+      onClick={() => updateStatus(order.id, "deliver")}
+      processing={processingId === order.id}
+    />
+  )}
+
+  {/* ✅ ALWAYS VIEW */}
+  <button
+    onClick={() => navigate(`/admin/orders/${order.id}`)}
+    className="px-3 py-2 text-xs text-white bg-[#7a2e00] rounded-lg"
+  >
+    View
+  </button>
+
+</td>
 
               </tr>
 
@@ -300,9 +377,12 @@ export default function AdminOrders() {
   );
 }
 
-/* ================= BUTTON ================= */
-
-function ActionBtn({ label, color, onClick, processing }: {
+function ActionBtn({
+  label,
+  color,
+  onClick,
+  processing,
+}: {
   label: string;
   color: string;
   onClick: () => void;

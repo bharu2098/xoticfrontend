@@ -23,18 +23,12 @@ const KitchenAddProduct = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-
-  /* ================= SLUG ================= */
-
   const generateSlug = (value: string) =>
     value
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
-
-  /* ================= IMAGE ================= */
-
   const handleImageChange = (file: File | null) => {
 
     setImage(file);
@@ -46,16 +40,11 @@ const KitchenAddProduct = () => {
       setPreview(null);
     }
   };
-
-  // ✅ FIX: cleanup preview (memory leak)
   useEffect(() => {
     return () => {
       if (preview) URL.revokeObjectURL(preview);
     };
   }, [preview]);
-
-  /* ================= ERROR HANDLER ================= */
-
   const extractBackendError = (data: any) => {
 
     if (!data) return "Something went wrong";
@@ -75,13 +64,11 @@ const KitchenAddProduct = () => {
     return data.message || "Failed to create product";
   };
 
-  /* ================= SUBMIT ================= */
-
   const handleSubmit = async (e: React.FormEvent) => {
 
     e.preventDefault();
 
-    if (loading) return; // ✅ prevent double click
+    if (loading) return;
 
     if (!user) {
       setError("Unauthorized. Please login again.");
@@ -95,6 +82,11 @@ const KitchenAddProduct = () => {
 
     if (Number(price) <= 0) {
       setError("Price must be greater than 0");
+      return;
+    }
+
+    if (stockQuantity && Number(stockQuantity) < 0) {
+      setError("Stock cannot be negative");
       return;
     }
 
@@ -125,10 +117,8 @@ const KitchenAddProduct = () => {
         "POST",
         formData
       );
-
       setSuccess(true);
 
-      // RESET FORM
       setCategory("");
       setName("");
       setSlug("");
@@ -142,7 +132,7 @@ const KitchenAddProduct = () => {
 
     } catch (err: any) {
 
-      console.error(err);
+      console.error(" Create product error:", err);
 
       setError(
         err?.message
@@ -157,8 +147,6 @@ const KitchenAddProduct = () => {
     }
 
   };
-
-  /* ================= UI ================= */
 
   return (
 
@@ -178,7 +166,7 @@ const KitchenAddProduct = () => {
 
         {success && (
           <div className="p-3 mb-4 text-green-700 bg-green-100 rounded-lg">
-            ✅ Product created successfully!
+             Product created successfully!
           </div>
         )}
 

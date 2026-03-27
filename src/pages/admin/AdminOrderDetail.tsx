@@ -2,8 +2,6 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 
-/* ================= TYPES ================= */
-
 interface OrderItem {
   id: number;
   product_name?: string;
@@ -47,14 +45,6 @@ interface OrderDetailType {
     razorpay_payment_id?: string;
   };
 
-  delivery?: {
-    status_display?: string;
-    rider_name?: string;
-    assigned_at?: string;
-    picked_at?: string;
-    delivered_at?: string;
-  };
-
   status_history?: {
     old_status: string;
     new_status: string;
@@ -69,23 +59,27 @@ const API =
 export default function AdminOrderDetail() {
 
   const { id } = useParams();
-  const { getToken, isLoaded } = useAuth(); // ✅ CLERK
+  const { getToken, isLoaded, isSignedIn } = useAuth();
 
   const [order, setOrder] = useState<OrderDetailType | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   /* ================= FETCH ================= */
 
   const fetchOrder = useCallback(async () => {
-    try {
-      if (!id || !isLoaded) return;
 
+    try {
+
+      if (!id || !isLoaded || !isSignedIn) return;
+
+      setLoading(true);
+      setError(null);
+
+      
       const token = await getToken();
 
-      if (!token) {
-        console.error("❌ No token");
-        return;
-      }
+      if (!token) throw new Error("No auth token");
 
       const res = await fetch(
         `${API}/api/orders/admin/orders/${id}/`,
@@ -96,17 +90,34 @@ export default function AdminOrderDetail() {
         }
       );
 
-      if (!res.ok) throw new Error("Order fetch failed");
+      const text = await res.text();
 
-      const data = await res.json();
+      let data: any;
+
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        throw new Error("Invalid server response");
+      }
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Order fetch failed");
+      }
+
       setOrder(data);
 
-    } catch (err) {
+    } catch (err: any) {
+
       console.error("Order detail error:", err);
+      setError(err.message);
+
     } finally {
+
       setLoading(false);
+
     }
-  }, [id, getToken, isLoaded]);
+
+  }, [id, getToken, isLoaded, isSignedIn]);
 
   useEffect(() => {
     fetchOrder();
@@ -120,21 +131,21 @@ export default function AdminOrderDetail() {
     return isNaN(d.getTime()) ? "-" : d.toLocaleString();
   };
 
+  /* ================= STATES ================= */
+
   if (!isLoaded || loading) {
-    return (
-      <div className="p-10 text-lg font-semibold">
-        Loading order details...
-      </div>
-    );
+    return <div className="p-10 text-lg font-semibold">Loading order details...</div>;
+  }
+
+  if (error) {
+    return <div className="p-10 text-red-600">{error}</div>;
   }
 
   if (!order) {
-    return (
-      <div className="p-10 text-lg text-red-600">
-        Order not found
-      </div>
-    );
+    return <div className="p-10 text-red-600">Order not found</div>;
   }
+
+  /* ================= UI ================= */
 
   return (
 
@@ -145,11 +156,11 @@ export default function AdminOrderDetail() {
       </h1>
 
       <Section title="User">
-        <p>{order.customer_name}</p>
+        <p>{order.customer_name || "-"}</p>
       </Section>
 
       <Section title="Kitchen">
-        <p>{order.kitchen_name}</p>
+        <p>{order.kitchen_name || "-"}</p>
       </Section>
 
       <Section title="Address">
@@ -160,9 +171,7 @@ export default function AdminOrderDetail() {
             {order.address.city} - {order.address.pincode}<br />
             {order.address.phone_number}
           </p>
-        ) : (
-          <p>-</p>
-        )}
+        ) : <p>-</p>}
       </Section>
 
       <Section title="Order Summary">
@@ -170,7 +179,7 @@ export default function AdminOrderDetail() {
           <Detail label="Payment Method" value={order.payment_method} />
           <Detail label="Is Paid" value={order.is_paid ? "Yes" : "No"} />
           <Detail label="Total Amount" value={`₹ ${order.total_amount}`} />
-          <Detail label="Discount Amount" value={`₹ ${order.discount_amount}`} />
+          <Detail label="Discount" value={`₹ ${order.discount_amount}`} />
           <Detail label="Delivery Fee" value={`₹ ${order.delivery_fee}`} />
           <Detail label="Final Amount" value={`₹ ${order.final_amount}`} />
         </Grid>
@@ -185,11 +194,11 @@ export default function AdminOrderDetail() {
       </Section>
 
       <Section title="Order Items">
-        <table className="w-full overflow-hidden border rounded-lg">
+        <table className="w-full border rounded-lg">
           <thead className="bg-gray-100">
             <tr>
               <th className="p-3 text-left">Product</th>
-              <th className="p-3 text-center">Quantity</th>
+              <th className="p-3 text-center">Qty</th>
               <th className="p-3 text-center">Price</th>
             </tr>
           </thead>
@@ -216,33 +225,21 @@ export default function AdminOrderDetail() {
 
       <Section title="Payment">
         <Grid>
-          <Detail label="Status" value={order.payment?.status} />
-          <Detail label="Amount" value={`₹ ${order.payment?.amount}`} />
-          <Detail label="Currency" value={order.payment?.currency} />
-          <Detail label="Refunded Amount" value={`₹ ${order.payment?.refunded_amount}`} />
-          <Detail label="Razorpay Order ID" value={order.payment?.razorpay_order_id} />
-          <Detail label="Razorpay Payment ID" value={order.payment?.razorpay_payment_id} />
+          <Detail label="Status" value={order.payment?.status || "-"} />
+          <Detail label="Amount" value={`₹ ${order.payment?.amount || 0}`} />
+          <Detail label="Currency" value={order.payment?.currency || "-"} />
+          <Detail label="Refunded" value={`₹ ${order.payment?.refunded_amount || 0}`} />
         </Grid>
       </Section>
 
-      <Section title="Delivery">
-        <Grid>
-          <Detail label="Status" value={order.delivery?.status_display} />
-          <Detail label="Partner" value={order.delivery?.rider_name || "-"} />
-          <Detail label="Assigned At" value={formatDate(order.delivery?.assigned_at)} />
-          <Detail label="Picked Up At" value={formatDate(order.delivery?.picked_at)} />
-          <Detail label="Delivered At" value={formatDate(order.delivery?.delivered_at)} />
-        </Grid>
-      </Section>
-
-      <Section title="Order Status History">
-        <table className="w-full overflow-hidden border rounded-lg">
+      <Section title="Status History">
+        <table className="w-full border rounded-lg">
           <thead className="bg-gray-100">
             <tr>
-              <th className="p-3 text-left">Old Status</th>
-              <th className="p-3 text-left">New Status</th>
-              <th className="p-3 text-left">Changed By</th>
-              <th className="p-3 text-left">Created At</th>
+              <th className="p-3">Old</th>
+              <th className="p-3">New</th>
+              <th className="p-3">By</th>
+              <th className="p-3">Time</th>
             </tr>
           </thead>
 
@@ -268,13 +265,12 @@ export default function AdminOrderDetail() {
       </Section>
 
     </div>
-
   );
 }
 
-/* ================= UI COMPONENTS ================= */
+/* ================= SMALL COMPONENTS ================= */
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: any) {
   return (
     <div className="p-6 bg-white shadow rounded-xl">
       <h2 className="text-xl font-semibold mb-4 text-[#7a2e00]">{title}</h2>
@@ -283,11 +279,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Grid({ children }: { children: React.ReactNode }) {
+function Grid({ children }: any) {
   return <div className="grid gap-4 md:grid-cols-2">{children}</div>;
 }
 
-function Detail({ label, value }: { label: string; value: any }) {
+function Detail({ label, value }: any) {
   return (
     <div>
       <p className="text-sm text-gray-500">{label}</p>

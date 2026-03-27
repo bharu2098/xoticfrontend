@@ -1,51 +1,71 @@
-/* ================= BASE ================= */
-
 const API_BASE =
   import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000/api";
-
-/* ================= GENERIC REQUEST ================= */
-
 const apiRequest = async <T>(
   endpoint: string,
   method: string = "GET",
   body?: any
 ): Promise<T> => {
+  try {
+    const token = localStorage.getItem("access");
+    const headers: Record<string, string> = {};
+    if (!(body instanceof FormData)) {
+      headers["Content-Type"] = "application/json";
+    }
 
-  const token = localStorage.getItem("access"); // 🔥 adjust if needed
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
 
-  const headers: Record<string, string> = {};
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      method,
+      headers,
+      body: body
+        ? body instanceof FormData
+          ? body
+          : JSON.stringify(body)
+        : undefined,
+    });
+    const text = await res.text();
 
-  if (!(body instanceof FormData)) {
-    headers["Content-Type"] = "application/json";
+    let data: any = null;
+
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { message: text };
+    }
+    if (!res.ok) {
+      if (res.status === 401) {
+        console.error(" Unauthorized");
+      }
+
+      if (res.status === 403) {
+        console.error(" Forbidden");
+      }
+
+      if (res.status >= 500) {
+        console.error(" Server error");
+      }
+
+      throw new Error(
+        data?.error ||
+        data?.detail ||
+        data?.message ||
+        `API Error (${res.status})`
+      );
+    }
+    if (res.status === 204) {
+      return {} as T;
+    }
+
+    return data as T;
+
+  } catch (err: any) {
+    console.error(" apiRequest error:", err);
+
+    throw new Error(err.message || "Network error");
   }
-
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    method,
-    headers,
-    body: body
-      ? body instanceof FormData
-        ? body
-        : JSON.stringify(body)
-      : undefined,
-  });
-
-  if (!res.ok) {
-    throw new Error("API Error");
-  }
-
-  if (res.status === 204) {
-    return {} as T;
-  }
-
-  return res.json();
 };
-
-/* ================= TYPES ================= */
-
 export interface Product {
   id: number;
   name: string;
@@ -69,21 +89,14 @@ export interface PaginatedResponse<T> {
   previous: string | null;
   results: T[];
 }
-
-/* ================= API ================= */
-
-/* ✅ GET PRODUCTS */
 export const getProducts = async (
   query: string = ""
 ): Promise<PaginatedResponse<Product>> => {
-
   try {
-
     const data = await apiRequest<PaginatedResponse<Product>>(
       `/products/${query ? `?${query}` : ""}`,
       "GET"
     );
-
     if (Array.isArray(data)) {
       return {
         count: data.length,
@@ -96,8 +109,7 @@ export const getProducts = async (
     return data;
 
   } catch (err) {
-
-    console.error("getProducts error:", err);
+    console.error(" getProducts error:", err);
 
     return {
       count: 0,
@@ -105,98 +117,62 @@ export const getProducts = async (
       previous: null,
       results: [],
     };
-
   }
-
 };
-
-/* ✅ GET PRODUCT DETAIL */
 export const getProductDetail = async (
   id: number
 ): Promise<Product | null> => {
-
   try {
-
-    const data = await apiRequest<Product>(
+    return await apiRequest<Product>(
       `/products/${id}/`,
       "GET"
     );
-
-    return data;
-
   } catch (err) {
-
-    console.error("getProductDetail error:", err);
+    console.error(" getProductDetail error:", err);
     return null;
-
   }
-
 };
-
-/* ✅ CREATE PRODUCT */
 export const createProduct = async (
   payload: Partial<Product>
 ): Promise<Product | null> => {
-
   try {
-
     return await apiRequest<Product>(
       `/products/`,
       "POST",
       payload
     );
-
   } catch (err) {
-
-    console.error("createProduct error:", err);
+    console.error(" createProduct error:", err);
     return null;
-
   }
-
 };
-
-/* ✅ UPDATE PRODUCT */
 export const updateProduct = async (
   id: number,
   payload: Partial<Product>
 ): Promise<Product | null> => {
-
   try {
-
     return await apiRequest<Product>(
       `/products/${id}/`,
       "PUT",
       payload
     );
-
   } catch (err) {
-
-    console.error("updateProduct error:", err);
+    console.error(" updateProduct error:", err);
     return null;
-
   }
-
 };
-
-/* ✅ DELETE PRODUCT */
 export const deleteProduct = async (
   id: number
 ): Promise<boolean> => {
-
   try {
-
     await apiRequest<void>(
       `/products/${id}/`,
       "DELETE"
     );
 
     return true;
-
   } catch (err) {
-
-    console.error("deleteProduct error:", err);
+    console.error(" deleteProduct error:", err);
     return false;
-
   }
-
 };

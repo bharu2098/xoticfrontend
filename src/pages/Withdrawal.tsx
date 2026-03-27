@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/clerk-react";
-
 interface Withdrawal {
   id: number;
   amount: string;
@@ -16,7 +15,7 @@ interface WithdrawalResponse {
 
 export default function Withdrawal() {
 
-  const { getToken, isLoaded } = useAuth(); // ✅ CLERK
+  const { getToken, isLoaded } = useAuth();
 
   const [amount, setAmount] = useState<string>("");
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
@@ -28,7 +27,7 @@ export default function Withdrawal() {
       const token = await getToken();
 
       if (!token) {
-        console.error("❌ No token");
+        console.error(" No token");
         return;
       }
 
@@ -41,12 +40,26 @@ export default function Withdrawal() {
         }
       );
 
-      const data: WithdrawalResponse = await res.json();
+      const text = await res.text();
+
+      let data: WithdrawalResponse;
+
+      try {
+        data = text ? JSON.parse(text) : { available_balance: "0", withdrawals: [] };
+      } catch {
+        data = { available_balance: "0", withdrawals: [] };
+      }
+
+      if (!res.ok) {
+        console.error(" Fetch failed:", data);
+        return;
+      }
+
       setWithdrawals(data.withdrawals || []);
       setBalance(data.available_balance || "0");
 
     } catch (err) {
-      console.error("Withdrawal fetch error:", err);
+      console.error(" Withdrawal fetch error:", err);
     } finally {
       setLoading(false);
     }
@@ -60,14 +73,24 @@ export default function Withdrawal() {
 
   const requestWithdraw = async () => {
     try {
-      const token = await getToken();
-
-      if (!token) {
-        console.error("❌ No token");
+      if (!amount || Number(amount) <= 0) {
+        console.error("Invalid amount");
         return;
       }
 
-      await fetch(
+      if (Number(amount) > Number(balance)) {
+        console.error("Amount exceeds balance");
+        return;
+      }
+
+      const token = await getToken();
+
+      if (!token) {
+        console.error(" No token");
+        return;
+      }
+
+      const res = await fetch(
         "http://127.0.0.1:8000/api/orders/delivery/request-withdrawal/",
         {
           method: "POST",
@@ -79,11 +102,25 @@ export default function Withdrawal() {
         }
       );
 
+      const text = await res.text();
+
+      let data: any;
+
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { message: text };
+      }
+
+      if (!res.ok) {
+        console.error(" Withdraw failed:", data);
+        return;
+      }
       setAmount("");
       fetchWithdrawals();
 
     } catch (err) {
-      console.error("Withdraw request error:", err);
+      console.error(" Withdraw request error:", err);
     }
   };
 

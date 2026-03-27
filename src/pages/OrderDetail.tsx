@@ -2,9 +2,6 @@ import { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { useAuthContext } from "../context/AuthContext";
 import { useApi } from "../services/api";
-
-/* ================= TYPES ================= */
-
 interface OrderItem {
   id: number;
   product_name: string;
@@ -31,9 +28,6 @@ interface OrderDetailType {
   items: OrderItem[];
   address?: Address;
 }
-
-/* ================= COMPONENT ================= */
-
 export default function OrderDetail() {
 
   const { id } = useParams<{ id: string }>();
@@ -59,17 +53,17 @@ export default function OrderDetail() {
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-
-  /* ================= FETCH ================= */
-
   const loadOrder = async () => {
     if (!id || !user) return;
 
     try {
+      setLoading(true);
+
       const data = await apiRequest<OrderDetailType>(`/orders/${id}/`);
       setOrder(data || null);
+
     } catch (err) {
-      console.error(err);
+      console.error(" Order fetch error:", err);
       setError("Failed to load order");
     } finally {
       setLoading(false);
@@ -79,9 +73,6 @@ export default function OrderDetail() {
   useEffect(() => {
     if (user) loadOrder();
   }, [id, user]);
-
-  /* ================= CANCEL ================= */
-
   const cancelOrder = async () => {
     if (!window.confirm("Cancel this order?")) return;
 
@@ -89,13 +80,11 @@ export default function OrderDetail() {
       await apiRequest(`/orders/${id}/cancel/`, "POST");
       alert("Order cancelled");
       loadOrder();
-    } catch {
+    } catch (err) {
+      console.error(" Cancel error:", err);
       alert("Cancel failed");
     }
   };
-
-  /* ================= CAMERA ================= */
-
   const startCamera = async () => {
     if (streamRef.current) return;
 
@@ -111,7 +100,8 @@ export default function OrderDetail() {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
-    } catch {
+    } catch (err) {
+      console.error("Camera error:", err);
       alert("Camera permission denied");
     }
   };
@@ -133,9 +123,6 @@ export default function OrderDetail() {
 
     return () => stopCamera();
   }, [showRefundModal]);
-
-  /* ================= PHOTO ================= */
-
   const capturePhoto = () => {
     const video = videoRef.current;
     if (!video) return;
@@ -159,9 +146,6 @@ export default function OrderDetail() {
       setPreviewType("image");
     });
   };
-
-  /* ================= VIDEO ================= */
-
   const startRecording = () => {
     if (!streamRef.current || isRecording) return;
 
@@ -191,9 +175,6 @@ export default function OrderDetail() {
   const stopRecording = () => {
     recorderRef.current?.stop();
   };
-
-  /* ================= REFUND ================= */
-
   const requestRefund = async () => {
 
     if (!refundReason) {
@@ -201,43 +182,36 @@ export default function OrderDetail() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("reason", refundReason);
-    formData.append("description", refundDescription);
-
-    if (refundFile) {
-      formData.append("proof", refundFile);
-    }
-
     try {
       setSubmittingRefund(true);
+
+      const formData = new FormData();
+      formData.append("reason", refundReason);
+      formData.append("description", refundDescription);
+
+      if (refundFile) {
+        formData.append("proof", refundFile);
+      }
 
       await apiRequest(`/orders/${id}/refund/`, "POST", formData);
 
       alert("Refund submitted");
       setShowRefundModal(false);
 
-    } catch {
+    } catch (err) {
+      console.error(" Refund error:", err);
       alert("Refund failed");
     } finally {
       setSubmittingRefund(false);
     }
   };
-
-  /* ================= STATES ================= */
-
   if (loading) return <div className="p-10 text-center">Loading...</div>;
   if (error) return <div className="p-10 text-red-600">{error}</div>;
   if (!order) return <div className="p-10">Order not found</div>;
-
-  /* ================= UI ================= */
-
   return (
     <div className="min-h-screen bg-[#f3e5d8] py-10 px-6">
 
       <div className="max-w-5xl mx-auto space-y-6">
-
-        {/* ORDER */}
         <div className="p-6 bg-white shadow rounded-2xl">
           <h1 className="text-2xl font-bold">Order #{order.id}</h1>
           <p>{new Date(order.created_at).toLocaleString()}</p>
@@ -245,7 +219,6 @@ export default function OrderDetail() {
           <span className="px-3 py-1 bg-[#6d4c41] text-white rounded">
             {order.status}
           </span>
-
           {order.status === "PENDING" && (
             <button
               onClick={cancelOrder}
@@ -255,8 +228,6 @@ export default function OrderDetail() {
             </button>
           )}
         </div>
-
-        {/* ADDRESS */}
         {order.address && (
           <div className="p-6 bg-white shadow rounded-2xl">
             <h2 className="mb-2 font-bold">Address</h2>
@@ -265,8 +236,6 @@ export default function OrderDetail() {
             <p>{order.address.city}</p>
           </div>
         )}
-
-        {/* ITEMS */}
         <div className="p-6 bg-white shadow rounded-2xl">
           <h2 className="mb-2 font-bold">Items</h2>
           {order.items.map((item) => (
@@ -276,9 +245,7 @@ export default function OrderDetail() {
             </div>
           ))}
         </div>
-
-        {/* REFUND BUTTON */}
-        {order.status === "DELIVERED" && (
+        {(order.status === "COMPLETED" || order.status === "DELIVERED") && (
           <button
             onClick={() => setShowRefundModal(true)}
             className="px-5 py-3 text-white bg-orange-600 rounded-xl"
@@ -286,9 +253,6 @@ export default function OrderDetail() {
             Request Refund
           </button>
         )}
-
-        {/* ================= MODAL ================= */}
-
         {showRefundModal && (
           <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/50">
 
@@ -329,9 +293,12 @@ export default function OrderDetail() {
 
               <button
                 onClick={requestRefund}
-                className="w-full py-2 text-white bg-green-600 rounded"
+                disabled={submittingRefund}
+                className={`w-full py-2 text-white rounded ${
+                  submittingRefund ? "bg-gray-400" : "bg-green-600"
+                }`}
               >
-                Submit Refund
+                {submittingRefund ? "Submitting..." : "Submit Refund"}
               </button>
 
               <button

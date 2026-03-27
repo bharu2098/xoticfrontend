@@ -10,17 +10,16 @@ export default function Login() {
   const navigate = useNavigate();
   const { isSignedIn, isLoaded, getToken } = useAuth();
 
-  const hasRedirected = useRef(false); // ✅ prevent multiple calls
+  const hasRedirected = useRef(false);
 
   useEffect(() => {
 
     const handleRedirect = async () => {
 
       if (!isLoaded) return;
-
       if (!isSignedIn) return;
 
-      if (hasRedirected.current) return; // ✅ prevent double run
+      if (hasRedirected.current) return;
       hasRedirected.current = true;
 
       try {
@@ -28,7 +27,7 @@ export default function Login() {
         const token = await getToken({ template: "default" });
 
         if (!token) {
-          console.error("❌ Token missing");
+          console.error(" Token missing");
           return;
         }
 
@@ -38,20 +37,27 @@ export default function Login() {
           },
         });
 
+        const text = await res.text();
+
+        let data: any;
+
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = null;
+        }
+
         if (!res.ok) {
-          console.error("❌ Profile API failed");
+          console.error(" Profile API failed:", data);
           return;
         }
 
-        const data = await res.json();
-        const user = data.user;
+        const user = data?.user;
 
-        console.log("✅ USER:", user);
-
-        /* ================= ROLE BASED ROUTING ================= */
+        console.log(" USER:", user);
 
         if (user?.is_staff) {
-          navigate("/admin"); // ✅ FIXED
+          navigate("/admin");
         } 
         else if (user?.is_kitchen_staff) {
           navigate("/kitchen/orders");
@@ -65,7 +71,7 @@ export default function Login() {
 
       } catch (err) {
 
-        console.error("❌ Redirect error:", err);
+        console.error(" Redirect error:", err);
 
       }
 
@@ -74,9 +80,6 @@ export default function Login() {
     handleRedirect();
 
   }, [isSignedIn, isLoaded, navigate, getToken]);
-
-  /* ================= LOADING ================= */
-
   if (!isLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -86,8 +89,6 @@ export default function Login() {
       </div>
     );
   }
-
-  /* ================= LOGIN UI ================= */
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">

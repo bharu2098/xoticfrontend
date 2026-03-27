@@ -5,8 +5,6 @@ import { AuthProvider } from "./context/AuthContext";
 import { ClerkProvider } from "@clerk/clerk-react";
 import "./index.css";
 import "leaflet/dist/leaflet.css";
-
-/* 🔥 USE ENV (IMPORTANT) */
 const clerkPubKey =
   import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
   "pk_test_aW1wcm92ZWQtb3Jpb2xlLTg0LmNsZXJrLmFjY291bnRzLmRldiQ";

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useAuth } from "@clerk/clerk-react";
 
 import {
@@ -21,19 +21,18 @@ const KitchenOrders = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 🔥 NEW STATES
+  const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
+
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<number | null>(null);
 
-  /* =========================================
-     LOAD ORDERS
-  ========================================= */
-
   const loadOrders = useCallback(async () => {
-
     if (!isSignedIn) return;
 
     try {
-
       setLoading(true);
 
       const data = await getKitchenOrders(status);
@@ -49,55 +48,29 @@ const KitchenOrders = () => {
       setError(null);
 
     } catch (err: any) {
-
-      console.error("❌ Kitchen orders error:", err);
+      console.error("Kitchen orders error:", err);
       setError(err?.message || "Failed to load orders");
-
     } finally {
-
       setLoading(false);
-
     }
 
   }, [status, isSignedIn]);
 
-  /* =========================================
-     INITIAL LOAD (ONLY ONCE)
-  ========================================= */
-
   useEffect(() => {
-
     if (!isLoaded || !isSignedIn) return;
-
     loadOrders();
-
   }, [isLoaded, isSignedIn, loadOrders]);
 
-  /* =========================================
-     WEBSOCKET
-  ========================================= */
-
+  // 🔥 WEBSOCKET (UNCHANGED)
   const connectSocket = useCallback(async () => {
-
     if (!isLoaded || !isSignedIn) return;
 
     try {
-
-      // ❌ Prevent multiple sockets
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
-
-      if (reconnectTimer.current) {
-        clearTimeout(reconnectTimer.current);
-      }
+      if (socketRef.current) socketRef.current.close();
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
 
       const token = await getToken();
-
-      if (!token) {
-        console.warn("❌ No websocket token");
-        return;
-      }
+      if (!token) return;
 
       const socket = new WebSocket(
         `${API_WS}/ws/kitchen/?token=${token}`
@@ -105,76 +78,61 @@ const KitchenOrders = () => {
 
       socketRef.current = socket;
 
-      socket.onopen = () => {
-        console.log("✅ Kitchen websocket connected");
-      };
-
       socket.onmessage = (event) => {
-
-        try {
-
-          const data = JSON.parse(event.data);
-
-          console.log("📡 Kitchen WS:", data);
-
-          if (
-            data.type === "kitchen_notification" ||
-            data.type === "order_status"
-          ) {
-            loadOrders();
-          }
-
-        } catch (err) {
-          console.error("❌ WS parse error", err);
+        const data = JSON.parse(event.data);
+        if (
+          data.type === "kitchen_notification" ||
+          data.type === "order_status"
+        ) {
+          loadOrders();
         }
-
-      };
-
-      socket.onerror = (err) => {
-        console.error("❌ Kitchen websocket error:", err);
       };
 
       socket.onclose = () => {
-
-        console.log("🔌 Kitchen websocket closed");
-
         reconnectTimer.current = window.setTimeout(() => {
           connectSocket();
         }, 5000);
-
       };
 
     } catch (err) {
-      console.error("❌ WS connection error:", err);
+      console.error(err);
     }
 
   }, [getToken, loadOrders, isLoaded, isSignedIn]);
 
-  /* =========================================
-     START WEBSOCKET
-  ========================================= */
-
   useEffect(() => {
-
     if (!isLoaded || !isSignedIn) return;
 
     connectSocket();
 
     return () => {
-
       socketRef.current?.close();
-
-      if (reconnectTimer.current) {
-        clearTimeout(reconnectTimer.current);
-      }
-
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
     };
 
   }, [connectSocket, isLoaded, isSignedIn]);
 
-  /* =========================================
-     UI
-  ========================================= */
+  // 🔍 FILTER
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o: any) => {
+      const text = search.toLowerCase();
+      return (
+        String(o.id).toLowerCase().includes(text) ||
+        String(o.user?.username || "").toLowerCase().includes(text)
+      );
+    });
+  }, [orders, search]);
+
+  // 📄 PAGINATION
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredOrders.length / itemsPerPage)
+  );
+
+  const paginatedOrders = filteredOrders.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   return (
 
@@ -182,8 +140,7 @@ const KitchenOrders = () => {
 
       <div className="mx-auto max-w-7xl">
 
-        {/* HEADER */}
-        <div className="flex flex-col gap-4 mb-10 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 mb-6 md:flex-row md:items-center md:justify-between">
 
           <h1 className="text-3xl font-bold text-[#4e342e]">
             Kitchen Orders
@@ -192,36 +149,47 @@ const KitchenOrders = () => {
           <select
             className="px-4 py-2 border border-[#c8b6a6] rounded-lg bg-white text-[#4e342e]"
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setCurrentPage(1);
+            }}
           >
             <option value="">All Orders</option>
             <option value="PENDING">Pending</option>
             <option value="CONFIRMED">Confirmed</option>
             <option value="PREPARING">Preparing</option>
             <option value="READY">Ready</option>
-            <option value="OUT_FOR_DELIVERY">
-              Out for Delivery
-            </option>
+            <option value="OUT_FOR_DELIVERY">Out for Delivery</option>
+            <option value="COMPLETED">Completed</option>
           </select>
 
         </div>
 
-        {/* LOADING */}
+        {/* 🔥 SEARCH */}
+        <input
+          type="text"
+          placeholder="Search Order ID / User"
+          className="w-full p-3 mb-6 border rounded-lg"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+          }}
+        />
+
         {loading && (
           <div className="text-center text-[#6d4c41]">
             Loading orders...
           </div>
         )}
 
-        {/* ERROR */}
         {error && !loading && (
           <div className="font-semibold text-center text-red-600">
             {error}
           </div>
         )}
 
-        {/* EMPTY */}
-        {!loading && !error && orders.length === 0 && (
+        {!loading && !error && filteredOrders.length === 0 && (
           <div className="p-10 text-center bg-[#faf6f1] border shadow rounded-2xl">
             <h3 className="text-lg font-semibold text-[#4e342e]">
               No orders found
@@ -229,17 +197,51 @@ const KitchenOrders = () => {
           </div>
         )}
 
-        {/* ORDERS */}
-        {!loading && !error && orders.length > 0 && (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {orders.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                refresh={loadOrders}
-              />
-            ))}
-          </div>
+        {!loading && !error && filteredOrders.length > 0 && (
+          <>
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              {paginatedOrders.map((order) => (
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  refresh={loadOrders}
+                />
+              ))}
+            </div>
+
+            {/* 🔥 PAGINATION */}
+            <div className="flex items-center justify-center gap-2 mt-6">
+              <button
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => p - 1)}
+                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+              >
+                Prev
+              </button>
+
+              {Array.from({ length: totalPages }, (_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`px-3 py-1 rounded ${
+                    currentPage === i + 1
+                      ? "bg-[#5a2d0c] text-white"
+                      : "bg-gray-200"
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+
+              <button
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => p + 1)}
+                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </>
         )}
 
       </div>

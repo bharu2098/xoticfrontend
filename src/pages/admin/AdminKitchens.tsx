@@ -9,8 +9,6 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
-/* ================= TYPES ================= */
-
 interface Kitchen {
   id: number;
   owner: number;
@@ -42,8 +40,6 @@ interface KitchenForm {
   closing_time: string;
 }
 
-/* ================= MAP ================= */
-
 const MapPicker = ({
   formData,
   setFormData,
@@ -51,10 +47,10 @@ const MapPicker = ({
   formData: KitchenForm;
   setFormData: React.Dispatch<React.SetStateAction<KitchenForm>>;
 }) => {
-  const position: [number, number] = [
-    Number(formData.latitude || 17.385),
-    Number(formData.longitude || 78.486),
-  ];
+  const lat = Number(formData.latitude) || 17.385;
+  const lng = Number(formData.longitude) || 78.486;
+
+  const position: [number, number] = [lat, lng];
 
   const MapClickHandler = () => {
     useMapEvents({
@@ -70,18 +66,18 @@ const MapPicker = ({
   };
 
   return (
-    <MapContainer center={position} zoom={12} style={{ height: 250 }}>
+    <MapContainer
+      key={`${formData.latitude}-${formData.longitude}`} 
+      center={position}
+      zoom={12}
+      style={{ height: 250 }}
+    >
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <Marker
-        key={`${formData.latitude}-${formData.longitude}`}
-        position={position}
-      />
+      <Marker position={position} />
       <MapClickHandler />
     </MapContainer>
   );
 };
-
-/* ================= INPUT ================= */
 
 interface InputProps {
   label: string;
@@ -101,9 +97,6 @@ const Input = ({ label, value, onChange, type = "text" }: InputProps) => (
     />
   </div>
 );
-
-/* ================= MAIN ================= */
-
 export default function AdminKitchens() {
   const [kitchens, setKitchens] = useState<Kitchen[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,12 +126,22 @@ export default function AdminKitchens() {
   const fetchKitchens = useCallback(async () => {
     try {
       setLoading(true);
+
       const data: any = await apiRequest(
         "/kitchen/admin/kitchens/?page_size=1000"
       );
-      setKitchens(Array.isArray(data) ? data : data?.results || []);
+
+      if (Array.isArray(data)) {
+        setKitchens(data);
+      } else if (data?.results) {
+        setKitchens(data.results);
+      } else {
+        setKitchens([]);
+      }
+
     } catch (err: any) {
-      alert(err.message);
+      console.error(" Fetch kitchens error:", err);
+      alert(err?.message || "Failed to load kitchens");
     } finally {
       setLoading(false);
     }
@@ -176,7 +179,8 @@ export default function AdminKitchens() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_active: newValue }),
       });
-    } catch {
+    } catch (err) {
+      console.error("Toggle error:", err);
       fetchKitchens();
     }
   };
@@ -193,8 +197,6 @@ export default function AdminKitchens() {
       latitude: formData.latitude,
       longitude: formData.longitude,
     };
-
-    console.log("PAYLOAD:", payload);
 
     try {
       if (editingId) {
@@ -213,19 +215,26 @@ export default function AdminKitchens() {
 
       resetForm();
       fetchKitchens();
+
     } catch (err: any) {
-      alert(err.message);
+      console.error(" Save error:", err);
+      alert(err?.message || "Failed to save kitchen");
     }
   };
 
   const deleteKitchen = async (id: number) => {
     if (!confirm("Delete kitchen?")) return;
 
-    await apiRequest(`/kitchen/admin/kitchens/${id}/`, {
-      method: "DELETE",
-    });
+    try {
+      await apiRequest(`/kitchen/admin/kitchens/${id}/`, {
+        method: "DELETE",
+      });
 
-    fetchKitchens();
+      fetchKitchens();
+    } catch (err: any) {
+      console.error(" Delete error:", err);
+      alert(err?.message || "Delete failed");
+    }
   };
 
   const editKitchen = (k: Kitchen) => {

@@ -7,7 +7,6 @@ export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ Normalize role
   const normalizedRole = role?.toLowerCase().trim();
 
   console.log("NAVBAR:", { user, role, normalizedRole, loading });
@@ -34,74 +33,91 @@ export default function Navbar() {
 
   if (hideNavbarRoutes.includes(location.pathname)) return null;
 
+  // 🔥 SAFE NAVIGATION (PREVENT WRONG REDIRECTS)
+  const handleNavigate = (path: string) => {
+    console.log("NAVIGATE:", path);
+
+    if (location.pathname === path) return; // prevent reload loop
+
+    navigate(path);
+  };
+
   return (
     <nav style={styles.nav}>
-      {/* LOGO */}
       <div style={styles.logo}>
         <span
           style={styles.logoText}
-          onClick={() => navigate("/")}
+          onClick={() => handleNavigate("/")}
         >
           Xotic
         </span>
       </div>
 
       <div style={styles.menu}>
-        {/* ================= LOADING ================= */}
         {loading && <span style={{ color: "#ccc" }}>Loading...</span>}
 
-        {/* ================= NOT LOGGED IN ================= */}
+        {/* 🔥 NOT LOGGED IN */}
         {!loading && !user && (
           <>
-            <NavItem to="/login" label="Login" active={isActive} />
-            <NavItem to="/register" label="Register" active={isActive} />
+            <NavItem to="/login" label="Login" active={isActive} onNav={handleNavigate} />
+            <NavItem to="/register" label="Register" active={isActive} onNav={handleNavigate} />
           </>
         )}
 
-        {/* ================= ADMIN ================= */}
+        {/* 🔥 ADMIN */}
         {!loading && normalizedRole === "admin" && (
           <>
-            <NavItem to="/admin" label="Admin Panel" active={isActive} />
-            <NavItem to="/delivery/dashboard" label="Delivery Dashboard" active={isActive} />
-            <NavItem to="/delivery/orders" label="Delivery Orders" active={isActive} />
+            <NavItem to="/admin" label="Admin Panel" active={isActive} onNav={handleNavigate} />
+            <NavItem to="/delivery/dashboard" label="Delivery Dashboard" active={isActive} onNav={handleNavigate} />
+            <NavItem to="/delivery/orders" label="Delivery Orders" active={isActive} onNav={handleNavigate} />
           </>
         )}
 
-        {/* ================= KITCHEN ================= */}
+        {/* 🔥 KITCHEN STAFF (FIXED) */}
         {!loading && normalizedRole === "kitchenstaff" && (
           <>
-            <NavItem to="/kitchen/dashboard" label="Kitchen Dashboard" active={isActive} />
-            <NavItem to="/kitchen/orders" label="Kitchen Orders" active={isActive} />
+            <NavItem
+              to="/kitchen/dashboard"
+              label="Kitchen Dashboard"
+              active={isActive}
+              onNav={handleNavigate}
+            />
+            <NavItem
+              to="/kitchen/orders"
+              label="Kitchen Orders"
+              active={isActive}
+              onNav={handleNavigate}
+            />
           </>
         )}
 
-        {/* ================= DELIVERY ================= */}
+        {/* 🔥 DELIVERY */}
         {!loading && normalizedRole === "delivery" && (
           <>
-            <NavItem to="/delivery/dashboard" label="Delivery Dashboard" active={isActive} />
-            <NavItem to="/delivery/orders" label="Delivery Orders" active={isActive} />
+            <NavItem to="/delivery/dashboard" label="Delivery Dashboard" active={isActive} onNav={handleNavigate} />
+            <NavItem to="/delivery/orders" label="Delivery Orders" active={isActive} onNav={handleNavigate} />
           </>
         )}
 
-        {/* ================= CUSTOMER ================= */}
+        {/* 🔥 CUSTOMER */}
         {!loading && normalizedRole === "customer" && (
           <>
-            <NavItem to="/" label="Home" active={isActive} />
-            <NavItem to="/products" label="Products" active={isActive} />
-            <NavItem to="/orders" label="My Orders" active={isActive} />
-            <NavItem to="/wallet" label="Wallet" active={isActive} />
-            <NavItem to="/transactions" label="Transactions" active={isActive} />
-            <NavItem to="/cart" label="Cart" active={isActive} />
-            <NavItem to="/profile" label="Profile" active={isActive} />
+            <NavItem to="/" label="Home" active={isActive} onNav={handleNavigate} />
+            <NavItem to="/products" label="Products" active={isActive} onNav={handleNavigate} />
+            <NavItem to="/orders" label="My Orders" active={isActive} onNav={handleNavigate} />
+            <NavItem to="/wallet" label="Wallet" active={isActive} onNav={handleNavigate} />
+            <NavItem to="/transactions" label="Transactions" active={isActive} onNav={handleNavigate} />
+            <NavItem to="/cart" label="Cart" active={isActive} onNav={handleNavigate} />
+            <NavItem to="/profile" label="Profile" active={isActive} onNav={handleNavigate} />
           </>
         )}
 
-        {/* ================= UNKNOWN ROLE ================= */}
+        {/* 🔥 ROLE NOT LOADED */}
         {!loading && user && !normalizedRole && (
           <span style={{ color: "orange" }}>Role not loaded</span>
         )}
 
-        {/* ================= LOGOUT ================= */}
+        {/* 🔥 LOGOUT */}
         {!loading && user && (
           <button onClick={handleLogout} style={styles.logoutBtn}>
             Logout
@@ -112,23 +128,17 @@ export default function Navbar() {
   );
 }
 
-/* ================= NAV ITEM ================= */
-
 type NavItemProps = {
   to: string;
   label: string;
   active: (path: string) => boolean;
+  onNav: (path: string) => void;
 };
 
-const NavItem = ({ to, label, active }: NavItemProps) => {
-  const navigate = useNavigate();
-
+const NavItem = ({ to, label, active, onNav }: NavItemProps) => {
   return (
     <span
-      onClick={() => {
-        console.log("🚀 NAVIGATE:", to);
-        navigate(to);
-      }}
+      onClick={() => onNav(to)}
       style={{
         ...(active(to) ? styles.activeLink : styles.link),
         cursor: "pointer",
@@ -138,8 +148,6 @@ const NavItem = ({ to, label, active }: NavItemProps) => {
     </span>
   );
 };
-
-/* ================= STYLES ================= */
 
 const styles: any = {
   nav: {

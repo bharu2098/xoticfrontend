@@ -1,10 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@clerk/clerk-react";
 
-/* =========================================
-   TYPES
-========================================= */
-
 interface DashboardData {
   total_deliveries: number;
   today_deliveries: number;
@@ -21,16 +17,8 @@ interface CardProps {
   value: string | number;
 }
 
-/* =========================================
-   API BASE
-========================================= */
-
 const API_BASE =
   import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
-
-/* =========================================
-   COMPONENT
-========================================= */
 
 export default function DeliveryDashboard() {
 
@@ -41,8 +29,6 @@ export default function DeliveryDashboard() {
   const [error, setError] = useState<string | null>(null);
 
   const intervalRef = useRef<number | null>(null);
-
-  /* ================= AUTH FETCH ================= */
 
   const authFetch = useCallback(async (url: string) => {
 
@@ -65,8 +51,6 @@ export default function DeliveryDashboard() {
     return res;
 
   }, [getToken, isLoaded, isSignedIn]);
-
-  /* ================= FETCH DASHBOARD ================= */
 
   const fetchDashboard = useCallback(async () => {
 
@@ -107,8 +91,6 @@ export default function DeliveryDashboard() {
 
   }, [authFetch]);
 
-  /* ================= INITIAL LOAD ================= */
-
   useEffect(() => {
 
     if (!isLoaded || !isSignedIn) return;
@@ -116,8 +98,6 @@ export default function DeliveryDashboard() {
     fetchDashboard();
 
   }, [isLoaded, isSignedIn, fetchDashboard]);
-
-  /* ================= AUTO REFRESH ================= */
 
   useEffect(() => {
 
@@ -137,8 +117,6 @@ export default function DeliveryDashboard() {
 
   }, [isLoaded, isSignedIn, fetchDashboard]);
 
-  /* ================= LOADING ================= */
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -148,8 +126,6 @@ export default function DeliveryDashboard() {
       </div>
     );
   }
-
-  /* ================= ERROR ================= */
 
   if (error) {
     return (
@@ -169,7 +145,6 @@ export default function DeliveryDashboard() {
 
       <div className="mx-auto max-w-7xl">
 
-        {/* HEADER */}
 
         <div className="flex flex-col gap-6 mb-10 md:flex-row md:justify-between md:items-center">
 
@@ -187,8 +162,6 @@ export default function DeliveryDashboard() {
 
         </div>
 
-        {/* TODAY STATS */}
-
         <div className="grid grid-cols-1 gap-6 mb-8 sm:grid-cols-3">
 
           <Card title="Today's Deliveries" value={data.today_deliveries ?? 0} />
@@ -199,8 +172,6 @@ export default function DeliveryDashboard() {
 
         </div>
 
-        {/* TOTAL EARNINGS */}
-
         <div className="bg-gradient-to-r from-[#6d4c41] to-[#4e342e] text-white p-8 rounded-3xl shadow-lg mb-10">
 
           <p className="text-sm opacity-80">Total Earnings</p>
@@ -210,8 +181,6 @@ export default function DeliveryDashboard() {
           </h2>
 
         </div>
-
-        {/* SYSTEM STATS */}
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
 
@@ -234,8 +203,6 @@ export default function DeliveryDashboard() {
 
   );
 }
-
-/* ================= CARD ================= */
 
 const Card = ({ title, value }: CardProps) => (
   <div className="p-6 transition bg-white shadow-md rounded-3xl hover:shadow-lg">

@@ -4,15 +4,48 @@ import { useAuth } from "@clerk/clerk-react";
 const API_BASE =
   import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 
-/* ================= TYPES ================= */
+/* ================= TYPES (🔥 FIXED) ================= */
 
 interface Analytics {
-  orders: any;
-  revenue: any;
-  users: any;
-  products: any;
-  last_7_days_revenue: any[];
+  orders?: {
+    total_orders?: number;
+    delivered_orders?: number;
+    cancelled_orders?: number;
+    pending_orders?: number;
+    completion_rate_percent?: number;
+    cancellation_rate_percent?: number;
+    completion_rate?: number;
+    cancellation_rate?: number;
+    count?: number;
+    delivered?: number;
+    cancelled?: number;
+  };
+
+  revenue?: {
+    total_revenue?: number;
+    today_revenue?: number;
+    average_order_value?: number;
+    total?: number;
+    today?: number;
+    avg?: number;
+  };
+
+  users?: {
+    total_users?: number;
+    count?: number;
+  };
+
+  products?: any;
+  last_7_days_revenue?: any[];
+
+  // fallback keys (backend variations)
+  revenue_total?: number;
+  total_revenue?: number;
+  today_revenue?: number;
+  average_order_value?: number;
 }
+
+/* ================= COMPONENT ================= */
 
 const AdminDashboard = () => {
 
@@ -36,10 +69,6 @@ const AdminDashboard = () => {
           return;
         }
 
-        /* ================= FETCH ANALYTICS DIRECTLY ================= */
-        // ❌ removed profile check (it was blocking data)
-        // backend already handles permission
-
         const statsRes = await fetch(
           `${API_BASE}/api/orders/admin/analytics/`,
           {
@@ -55,7 +84,7 @@ const AdminDashboard = () => {
 
         const data = await statsRes.json();
 
-        console.log("📊 ANALYTICS DATA:", data); // ✅ DEBUG
+        console.log("📊 ANALYTICS DATA:", data); // DEBUG
 
         setStats(data);
 
@@ -85,25 +114,64 @@ const AdminDashboard = () => {
     );
   }
 
-  /* ================= SAFE VALUES ================= */
+  /* ================= SAFE VALUES (🔥 FIXED) ================= */
 
-  const totalUsers = stats?.users?.total_users ?? 0;
-  const totalOrders = stats?.orders?.total_orders ?? 0;
-  const deliveredOrders = stats?.orders?.delivered_orders ?? 0;
-  const cancelledOrders = stats?.orders?.cancelled_orders ?? 0;
+  const totalUsers =
+    stats?.users?.total_users ??
+    stats?.users?.count ??
+    0;
+
+  const totalOrders =
+    stats?.orders?.total_orders ??
+    stats?.orders?.count ??
+    0;
+
+  const deliveredOrders =
+    stats?.orders?.delivered_orders ??
+    stats?.orders?.delivered ??
+    0;
+
+  const cancelledOrders =
+    stats?.orders?.cancelled_orders ??
+    stats?.orders?.cancelled ??
+    0;
 
   const pendingOrders =
-    totalOrders - deliveredOrders - cancelledOrders;
+    stats?.orders?.pending_orders ??
+    (totalOrders - deliveredOrders - cancelledOrders);
 
-  const totalRevenue = stats?.revenue?.total_revenue ?? 0;
-  const todayRevenue = stats?.revenue?.today_revenue ?? 0;
-  const avgOrderValue = stats?.revenue?.average_order_value ?? 0;
+  /* 🔥 REVENUE FIX (handles ALL backend formats) */
+
+  const totalRevenue =
+    stats?.revenue?.total_revenue ??
+    stats?.revenue?.total ??
+    stats?.revenue_total ??
+    stats?.total_revenue ??
+    0;
+
+  const todayRevenue =
+    stats?.revenue?.today_revenue ??
+    stats?.revenue?.today ??
+    stats?.today_revenue ??
+    0;
+
+  const avgOrderValue =
+    stats?.revenue?.average_order_value ??
+    stats?.revenue?.avg ??
+    stats?.average_order_value ??
+    0;
+
+  /* 🔥 RATE FIX */
 
   const completionRate =
-    stats?.orders?.completion_rate_percent ?? 0;
+    stats?.orders?.completion_rate_percent ??
+    stats?.orders?.completion_rate ??
+    0;
 
   const cancellationRate =
-    stats?.orders?.cancellation_rate_percent ?? 0;
+    stats?.orders?.cancellation_rate_percent ??
+    stats?.orders?.cancellation_rate ??
+    0;
 
   /* ================= UI ================= */
 

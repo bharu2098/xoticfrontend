@@ -1,17 +1,8 @@
-// ======================================================
-// API BASE
-// ======================================================
-
 const API_BASE =
   import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000/api";
 
 const WS_BASE =
   import.meta.env.VITE_WS_BASE || "ws://127.0.0.1:8000";
-
-
-// ======================================================
-// TYPES
-// ======================================================
 
 export type KitchenStatus =
   | "ONLINE"
@@ -24,6 +15,7 @@ export type OrderStatus =
   | "CONFIRMED"
   | "PREPARING"
   | "READY"
+  | "COMPLETED"
   | "OUT_FOR_DELIVERY"
   | "DELIVERED"
   | "CANCELLED";
@@ -32,13 +24,9 @@ export type KitchenOrderAction =
   | "accept"
   | "preparing"
   | "ready"
+  | "complete"
   | "dispatch-order"
   | "deliver";
-
-
-// ======================================================
-// DASHBOARD TYPE
-// ======================================================
 
 export interface KitchenDashboardResponse {
   kitchen: string;
@@ -73,11 +61,6 @@ export interface KitchenDashboardResponse {
   }[];
 }
 
-
-// ======================================================
-// ORDER TYPES
-// ======================================================
-
 export interface KitchenOrderItem {
   id: number;
   product_name: string;
@@ -102,11 +85,6 @@ export interface KitchenOrder {
   delivery_partner?: DeliveryPartner | null;
 }
 
-
-// ======================================================
-// RESPONSE TYPES
-// ======================================================
-
 interface UpdateStatusResponse {
   status: KitchenStatus;
 }
@@ -114,11 +92,6 @@ interface UpdateStatusResponse {
 interface UpdateOrderResponse {
   status: OrderStatus;
 }
-
-
-// ======================================================
-// CLERK TOKEN HANDLING
-// ======================================================
 
 let clerkTokenGetter: (() => Promise<string | null>) | null = null;
 
@@ -128,12 +101,7 @@ export const setClerkTokenGetter = (
   clerkTokenGetter = getter;
 };
 
-
-// ======================================================
-// AUTH HEADERS (🔥 IMPROVED)
-// ======================================================
-
-const getAuthHeaders = async (): Promise<HeadersInit> => {
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
   let token: string | null = null;
 
   for (let i = 0; i < 5; i++) {
@@ -142,49 +110,45 @@ const getAuthHeaders = async (): Promise<HeadersInit> => {
         token = await clerkTokenGetter();
         if (token) break;
       } catch (err) {
-        console.error("❌ Token fetch error:", err);
+        console.error("Token fetch error:", err);
       }
     }
     await new Promise((r) => setTimeout(r, 100));
   }
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json", // ✅ ALWAYS INCLUDED
-  };
+  const headers: Record<string, string> = {};
 
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   } else {
-    console.warn("⚠️ No Clerk token available");
+    console.warn("No Clerk token available");
   }
 
   return headers;
 };
 
-
-// ======================================================
-// GENERIC API REQUEST (🔥 FINAL FIXED)
-// ======================================================
-
 export const apiRequest = async <T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> => {
-
   const url = `${API_BASE}${endpoint}`;
   const authHeaders = await getAuthHeaders();
 
-  const finalHeaders: HeadersInit = {
+  const finalHeaders: Record<string, string> = {
     ...authHeaders,
-    ...(options.headers || {}), // ✅ MERGE CORRECTLY
+    ...(options.headers as Record<string, string>),
   };
+
+  if (!(options.body instanceof FormData)) {
+    finalHeaders["Content-Type"] = "application/json";
+  }
 
   const response = await fetch(url, {
     ...options,
     headers: finalHeaders,
   });
 
-  console.log("📡 API:", endpoint, response.status);
+  console.log("API:", endpoint, response.status);
 
   if (response.status === 401) {
     throw new Error("Session expired. Please login again.");
@@ -216,11 +180,6 @@ export const apiRequest = async <T>(
   return response.json() as Promise<T>;
 };
 
-
-// ======================================================
-// WEBSOCKET
-// ======================================================
-
 export const createKitchenSocket = async () => {
   if (!clerkTokenGetter) return null;
 
@@ -231,28 +190,22 @@ export const createKitchenSocket = async () => {
     `${WS_BASE}/ws/kitchen/?token=${token}`
   );
 
-  ws.onopen = () => console.log("✅ WS connected");
-  ws.onerror = (e) => console.error("❌ WS error", e);
-  ws.onclose = () => console.log("⚠️ WS closed");
+  ws.onopen = () => console.log("WS connected");
+  ws.onerror = (e) => console.error("WS error", e);
+
+  ws.onclose = () => {
+    console.log("WS closed - retrying...");
+    setTimeout(createKitchenSocket, 3000);
+  };
 
   return ws;
 };
-
-
-// ======================================================
-// DASHBOARD
-// ======================================================
 
 export const getKitchenDashboard = (
   range: string = "weekly"
 ): Promise<KitchenDashboardResponse> => {
   return apiRequest(`/kitchen/dashboard/?range=${range}`);
 };
-
-
-// ======================================================
-// STATUS UPDATE
-// ======================================================
 
 export const updateKitchenStatus = (
   status: KitchenStatus
@@ -263,15 +216,9 @@ export const updateKitchenStatus = (
   });
 };
 
-
-// ======================================================
-// GET ORDERS
-// ======================================================
-
 export const getKitchenOrders = async (
   status?: string
 ): Promise<KitchenOrder[]> => {
-
   const query = status ? `?status=${status}` : "";
 
   const data = await apiRequest<any>(`/kitchen/orders/${query}`);
@@ -285,31 +232,33 @@ export const getKitchenOrders = async (
   return [];
 };
 
-
-// ======================================================
-// UPDATE ORDER
-// ======================================================
-
+/// ✅🔥 FIXED (PATCH → POST)
 export const updateOrderStatus = (
   orderId: number,
   action: KitchenOrderAction
 ): Promise<UpdateOrderResponse> => {
   return apiRequest(
     `/kitchen/orders/${orderId}/${action}/`,
-    { method: "PATCH" }
+    { method: "POST" }
   );
 };
 
+/// ✅🔥 FIXED
+export const completeOrder = (
+  orderId: number
+): Promise<UpdateOrderResponse> => {
+  return apiRequest(
+    `/kitchen/orders/${orderId}/complete/`,
+    { method: "POST" }
+  );
+};
 
-// ======================================================
-// SIMULATE DELIVERY
-// ======================================================
-
+/// ✅🔥 FIXED
 export const simulateDeliveryComplete = (
   orderId: number
 ): Promise<UpdateOrderResponse> => {
   return apiRequest(
     `/kitchen/orders/${orderId}/deliver/`,
-    { method: "PATCH" }
+    { method: "POST" }
   );
 };

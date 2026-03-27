@@ -2,113 +2,96 @@ import http from "k6/http";
 import { sleep, check } from "k6";
 
 // =====================================
-// LOAD TEST CONFIG
+// LOAD TEST CONFIG (500 USERS)
 // =====================================
 export const options = {
-  vus: 5, // ⚠️ keep low since you only have 1–2 users
-  duration: "30s",
+  scenarios: {
+    browse: {
+      executor: "constant-vus",
+      vus: 450,
+      duration: "1m",
+      exec: "browse", // 🔥 FIX
+    },
+
+    checkout: {
+      executor: "constant-vus",
+      vus: 50,
+      duration: "1m",
+      exec: "checkout", // 🔥 FIX
+    },
+  },
 
   thresholds: {
-    http_req_duration: ["p(95)<2000"],
     http_req_failed: ["rate<0.05"],
+    http_req_duration: ["p(95)<1500"],
   },
 };
 
-// =====================================
-// ⚠️ USE ONLY NORMAL USER TOKENS
-// (Admin may fail checkout)
-// =====================================
-const TOKENS = [
-  "USER_TOKEN_NORMAL_1",
-  // "USER_TOKEN_NORMAL_2" (optional if you have)
-];
+const BASE_URL = "http://127.0.0.1:8000";
+const TOKEN = "eyJhbGciOiJSUzI1NiIsImNhdCI6ImNsX0I3ZDRQRDExMUFBQSIsImtpZCI6Imluc18zQjk5bkhaTHoxaEx4eW1DNWRteDlwdGcxMjQiLCJ0eXAiOiJKV1QifQ.eyJhenAiOiJodHRwOi8vbG9jYWxob3N0OjUxNzMiLCJleHAiOjE3NzQ0NDcyMDQsImZ2YSI6Wzc1NDAsLTFdLCJpYXQiOjE3NzQ0NDcxNDQsImlzcyI6Imh0dHBzOi8vaW1wcm92ZWQtb3Jpb2xlLTg0LmNsZXJrLmFjY291bnRzLmRldiIsIm5iZiI6MTc3NDQ0NzEzNCwic2lkIjoic2Vzc18zQkNZblFsUEJKNTJwcklRajR2d1JCaWxldkYiLCJzdHMiOiJhY3RpdmUiLCJzdWIiOiJ1c2VyXzNCQ0I4QW9JeHRLSGYyY2FyWE1tV1BqMWIydiIsInYiOjJ9.o3c4RcMM9f-L5vGOyDvQIAIfJlvA9OyZbefHpRek5p9uB5z8Yo1I_-jxUkIe_hzjsUl2D-9ov7gG0BnoE-iSNvfRtB0Ji-wDJy8pfU0pQUIKjQUojJtXqHfNDDflmUoXRtNp0sgtvvcIJX28CdSBDxlai0fz94Ur5NH6EUJ4xzx9D4hJSspFfgidBakfY-ARb-NiwZgPB8JCR2zXM0bVO_GH7WF3n6auhvGSWyqV12P_5IgO1MZEfqySpZRTPDAc5PSNQe9Cx7YWTkr1SNl78G40Nx_B9I-LvUIgag2UoirgOYh4e-xEECaW9nLPLcQHNRdcJ3BMfwRLniIVRSHGJw";
 
 // =====================================
-// TOKEN PICKER (SAFE RANDOM)
+// HEADERS
 // =====================================
-function getToken() {
-  return TOKENS[Math.floor(Math.random() * TOKENS.length)];
+function getHeaders() {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${TOKEN}`,
+  };
 }
 
 // =====================================
-// MAIN FLOW
+// BROWSE FUNCTION (450 USERS)
 // =====================================
-export default function () {
-  const token = getToken();
+export function browse() {
+  const res1 = http.get(`${BASE_URL}/api/products/`);
+  const res2 = http.get(`${BASE_URL}/api/categories/`);
 
-  if (!token) {
-    console.log("❌ No token found");
-    sleep(1);
-    return;
-  }
+  check(res1, { "products 200": (r) => r.status === 200 });
+  check(res2, { "categories 200": (r) => r.status === 200 });
 
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
+  sleep(Math.random() * 2);
+}
 
-  // =====================================
-  // STEP 1: ADD TO CART
-  // =====================================
+// =====================================
+// CHECKOUT FUNCTION (50 USERS)
+// =====================================
+export function checkout() {
+  const headers = getHeaders();
+
   const addRes = http.post(
-    "http://127.0.0.1:8000/api/cart/items/",
+    `${BASE_URL}/api/cart/items/`,
     JSON.stringify({
       product_id: 2,
       quantity: 1,
     }),
-    {
-      headers,
-      tags: { name: "AddToCart" },
-    }
+    { headers }
   );
 
-  const addSuccess = check(addRes, {
-    "add to cart success": (r) =>
-      r.status === 200 || r.status === 201,
+  check(addRes, {
+    "add success": (r) => r.status === 200 || r.status === 201,
   });
 
-  if (!addSuccess) {
-    console.log(
-      "❌ ADD TO CART FAILED:",
-      addRes.status,
-      addRes.body
-    );
-    sleep(1);
-    return; // 🚨 stop this iteration
-  }
+  sleep(1);
 
-  // small realistic delay
-  sleep(Math.random() * 0.5 + 0.2);
+  const cartRes = http.get(`${BASE_URL}/api/cart/`, { headers });
 
-  // =====================================
-  // STEP 2: CHECKOUT
-  // =====================================
+  if (cartRes.status !== 200) return;
+
+  sleep(1);
+
   const checkoutRes = http.post(
-    "http://127.0.0.1:8000/api/orders/checkout/",
+    `${BASE_URL}/api/orders/checkout/`,
     JSON.stringify({
-      address_id: 4, // ⚠️ must belong to THIS user
+      address_id: 4,
     }),
-    {
-      headers,
-      tags: { name: "Checkout" },
-    }
+    { headers }
   );
 
-  const checkoutSuccess = check(checkoutRes, {
+  check(checkoutRes, {
     "checkout success": (r) =>
       r.status === 200 || r.status === 201,
   });
 
-  if (!checkoutSuccess) {
-    console.log(
-      "❌ CHECKOUT FAILED:",
-      checkoutRes.status,
-      checkoutRes.body
-    );
-  }
-
-  // =====================================
-  // FINAL THINK TIME
-  // =====================================
-  sleep(Math.random() * 1 + 0.5);
+  sleep(2);
 }

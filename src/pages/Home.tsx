@@ -54,120 +54,81 @@ export default function Home() {
 
   const socketRef = useRef<WebSocket | null>(null);
 
-  /* =========================================
-     FETCH PRODUCTS
-  ========================================= */
-
   const fetchProducts = async () => {
-
     try {
-
       const res = await fetch(`${API_BASE}/products/`);
-      const data = await res.json();
+      const text = await res.text();
 
-      setProducts(data.results || data);
+      let data: any;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = null;
+      }
 
+      if (!res.ok) throw new Error("Failed to fetch products");
+
+      setProducts(data?.results || data || []);
     } catch (err) {
-
-      console.error("Product fetch failed", err);
-
+      console.error(" Product fetch failed", err);
     } finally {
-
       setLoading(false);
-
     }
-
   };
 
-  /* =========================================
-     FETCH ACTIVE ORDER
-  ========================================= */
-
   const fetchActiveOrder = async () => {
-
     if (!user) return;
 
     try {
-
       const data = await apiRequest<ActiveOrder | null>(
         `/orders/active-order/`
       );
 
       if (data?.id) {
-
         setActiveOrder(data);
 
-        const seconds = data.remaining_delivery_minutes * 60;
+        const seconds = (data.remaining_delivery_minutes || 0) * 60;
 
         setTimeLeft(seconds);
         setEndTime(Date.now() + seconds * 1000);
-
       } else {
-
         setActiveOrder(null);
         setTimeLeft(0);
         setEndTime(null);
         setRiderLocation(null);
-
       }
-
     } catch (err) {
-
-      console.error("Active order fetch failed", err);
-
+      console.error(" Active order fetch failed", err);
     }
-
   };
 
-  /* =========================================
-     INITIAL LOAD
-  ========================================= */
-
   useEffect(() => {
-
     fetchProducts();
     fetchActiveOrder();
-
   }, [user]);
 
-  /* =========================================
-     TIMER
-  ========================================= */
-
   useEffect(() => {
-
     if (!endTime) return;
 
     const timer = setInterval(() => {
-
       const remaining = Math.max(
         Math.floor((endTime - Date.now()) / 1000),
         0
       );
 
       setTimeLeft(remaining);
-
     }, 1000);
 
     return () => clearInterval(timer);
-
   }, [endTime]);
 
-  /* =========================================
-     WEBSOCKET TRACKING (FIXED)
-  ========================================= */
-
   useEffect(() => {
-
     if (!activeOrder?.id) return;
 
-    const token = localStorage.getItem("access"); // ⚠️ keep as your backend expects
-
+    const token = localStorage.getItem("access");
     if (!token) return;
 
-    if (socketRef.current) {
-      socketRef.current.close();
-    }
+    socketRef.current?.close();
 
     const socket = new WebSocket(
       `${WS_BASE}/ws/orders/${activeOrder.id}/?token=${token}`
@@ -176,22 +137,17 @@ export default function Home() {
     socketRef.current = socket;
 
     socket.onmessage = async (event) => {
-
       try {
-
         const data = JSON.parse(event.data);
 
         if (data.type === "location_update") {
-
           setRiderLocation({
             lat: data.latitude,
             lng: data.longitude,
           });
-
         }
 
         if (data.type === "order_status") {
-
           const newStatus = data.status;
 
           setActiveOrder((prev) =>
@@ -200,47 +156,34 @@ export default function Home() {
 
           await fetchActiveOrder();
 
-          if (newStatus === "DELIVERED") {
-
+          if (
+            newStatus === "DELIVERED" ||
+            newStatus === "COMPLETED"
+          ) {
             setActiveOrder(null);
             setTimeLeft(0);
             setEndTime(null);
             setRiderLocation(null);
-
             socket.close();
-
           }
-
         }
-
       } catch (err) {
-
-        console.error("Websocket parse error", err);
-
+        console.error(" Websocket parse error", err);
       }
-
     };
 
     return () => {
       socket.close();
     };
-
   }, [activeOrder?.id]);
 
-  /* =========================================
-     FILTER
-  ========================================= */
-
   const filteredProducts = useMemo(() => {
-
     return products.filter((p) =>
       p.name.toLowerCase().includes(search.toLowerCase())
     );
-
   }, [products, search]);
 
   const formatTime = (seconds: number) => {
-
     const mins = Math.floor(seconds / 60)
       .toString()
       .padStart(2, "0");
@@ -250,27 +193,21 @@ export default function Home() {
       .padStart(2, "0");
 
     return `${mins}:${secs}`;
-
   };
 
   if (loading) {
-
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
         Loading delicious food...
       </div>
     );
-
   }
 
   return (
     <div className="min-h-screen bg-[#f3e5d8] py-12 px-6">
-
       <div className="mx-auto max-w-7xl">
 
-        {/* TRACKING */}
         {activeOrder && (
-
           <div className="p-6 mb-10 bg-white shadow-md rounded-2xl">
 
             <h2 className="text-xl font-bold">
@@ -283,16 +220,21 @@ export default function Home() {
               Status: <b>{activeOrder.status.replace(/_/g, " ")}</b>
             </p>
 
+            {/* ✅ FIXED: ONLY SHOW TIMER FOR OUT_FOR_DELIVERY */}
             {activeOrder.status === "OUT_FOR_DELIVERY" && (
-
               <p className="font-semibold text-green-600">
                 {formatTime(timeLeft)}
               </p>
+            )}
 
+            {/* OPTIONAL UX */}
+            {activeOrder.status === "READY" && (
+              <p className="font-semibold text-yellow-600">
+                Your order is ready 🚀
+              </p>
             )}
 
             {activeOrder.status === "OUT_FOR_DELIVERY" && (
-
               <MapContainer
                 center={
                   riderLocation
@@ -302,32 +244,23 @@ export default function Home() {
                 zoom={13}
                 style={{ height: "350px" }}
               >
-
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
                 {riderLocation && (
-
                   <Marker
                     position={[riderLocation.lat, riderLocation.lng]}
                     icon={riderIcon}
                   >
                     <Popup>Delivery Partner</Popup>
                   </Marker>
-
                 )}
-
               </MapContainer>
-
             )}
 
           </div>
-
         )}
 
-        {/* PRODUCTS */}
-
         <div className="flex justify-between mb-10">
-
           <h1 className="text-4xl font-bold text-[#4e342e]">
             Discover Food 🍕
           </h1>
@@ -338,13 +271,10 @@ export default function Home() {
             placeholder="Search..."
             className="px-4 py-2 border rounded-xl"
           />
-
         </div>
 
         <div className="grid grid-cols-4 gap-6">
-
           {filteredProducts.map((product) => (
-
             <div key={product.id} className="p-4 bg-white rounded-xl">
 
               <img
@@ -356,7 +286,6 @@ export default function Home() {
 
               <p className="mt-1">₹ {product.price}</p>
 
-              {/* 🔥 BROWN BUTTON */}
               <Link
                 to={`/products/${product.id}`}
                 className="inline-block px-4 py-2 mt-3 text-sm font-semibold text-white bg-[#6d4c41] rounded-lg hover:bg-[#5d4037] transition"
@@ -365,13 +294,10 @@ export default function Home() {
               </Link>
 
             </div>
-
           ))}
-
         </div>
 
       </div>
-
     </div>
   );
 }

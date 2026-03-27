@@ -1,4 +1,4 @@
- import { updateDeliveryStatus } from "../services/deliveryService";
+import { updateDeliveryStatus } from "../services/deliveryService";
 
 interface Props {
   order: any;
@@ -8,14 +8,29 @@ interface Props {
 const DeliveryOrderCard = ({ order, refresh }: Props) => {
 
   const handleAction = async (action: string) => {
-    await updateDeliveryStatus(order.id, action);
-    refresh();
+
+    try {
+      if (!updateDeliveryStatus) {
+        console.warn(" Delivery service disabled");
+        return;
+      }
+
+      await updateDeliveryStatus(order.id, action);
+
+      refresh();
+
+    } catch (err) {
+
+      console.error(" Delivery action error:", err);
+      alert("Action failed");
+
+    }
+
   };
 
   return (
     <div className="bg-white p-6 rounded-3xl shadow-md hover:shadow-lg transition border border-[#e6d5c3]">
 
-      {/* Header */}
       <div className="flex justify-between mb-4">
         <div>
           <h2 className="text-lg font-bold text-[#4e342e]">
@@ -32,22 +47,16 @@ const DeliveryOrderCard = ({ order, refresh }: Props) => {
           </p>
         </div>
       </div>
-
-      {/* Address */}
       <div className="bg-[#f3e5d8] p-4 rounded-xl mb-4 text-sm text-[#5d4037]">
         📍 {order.address?.address_line}, {order.address?.city}
         <br />
         📞 {order.address?.phone_number}
       </div>
-
-      {/* Status */}
       <div className="mb-4">
         <span className="px-3 py-1 text-xs font-medium text-white bg-[#6d4c41] rounded-full">
           {order.status}
         </span>
       </div>
-
-      {/* Buttons */}
       <div className="flex gap-3">
 
         {order.status === "READY" && (
@@ -58,13 +67,20 @@ const DeliveryOrderCard = ({ order, refresh }: Props) => {
             Pickup
           </button>
         )}
-
         {order.status === "OUT_FOR_DELIVERY" && (
           <button
             onClick={() => handleAction("deliver")}
             className="px-4 py-2 text-white bg-green-600 rounded-lg hover:bg-green-700"
           >
             Mark Delivered
+          </button>
+        )}
+        {order.status === "READY" && (
+          <button
+            onClick={() => handleAction("complete")}
+            className="px-4 py-2 text-white bg-green-700 rounded-lg hover:bg-green-800"
+          >
+            Mark Completed
           </button>
         )}
 

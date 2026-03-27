@@ -11,10 +11,6 @@ export default function ProductList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  /* =========================================
-     LOAD PRODUCTS
-  ========================================= */
-
   const loadProducts = async () => {
     try {
 
@@ -33,7 +29,7 @@ export default function ProductList() {
 
     } catch (err) {
 
-      console.error("Product fetch error:", err);
+      console.error(" Product fetch error:", err);
       setError("Failed to load products");
       setProducts([]);
 
@@ -43,22 +39,11 @@ export default function ProductList() {
 
     }
   };
-
-  /* =========================================
-     FETCH PRODUCTS
-  ========================================= */
-
   useEffect(() => {
-    // only run when user state is ready
     if (user !== undefined) {
       loadProducts();
     }
   }, [user]);
-
-  /* =========================================
-     LOADING
-  ========================================= */
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -68,11 +53,6 @@ export default function ProductList() {
       </div>
     );
   }
-
-  /* =========================================
-     ERROR
-  ========================================= */
-
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -82,11 +62,6 @@ export default function ProductList() {
       </div>
     );
   }
-
-  /* =========================================
-     UI
-  ========================================= */
-
   return (
     <div className="min-h-screen bg-[#f3e5d8] py-12 px-6">
 
@@ -113,14 +88,13 @@ export default function ProductList() {
                 to={`/products/${product.id}`}
                 className="overflow-hidden transition duration-300 bg-white shadow-md group rounded-3xl hover:shadow-xl"
               >
-
-                {/* IMAGE */}
                 <div className="overflow-hidden">
 
                   {product.image ? (
                     <img
                       src={product.image}
                       alt={product.name}
+                      loading="lazy" 
                       onError={(e) => {
                         (e.currentTarget as HTMLImageElement).src =
                           "https://via.placeholder.com/300x200?text=No+Image";
@@ -134,8 +108,6 @@ export default function ProductList() {
                   )}
 
                 </div>
-
-                {/* CONTENT */}
                 <div className="p-5">
 
                   <h2 className="text-lg font-semibold text-[#3e2723]">

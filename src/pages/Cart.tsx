@@ -2,8 +2,6 @@ import { useEffect, useState, useContext, useCallback } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import { AuthContext } from "../context/AuthContext";
 
-/* ================= AUTH TYPE FIX ================= */
-
 interface AuthContextType {
   access: string | null;
   refreshAccessToken: () => Promise<string | null>;
@@ -17,14 +15,6 @@ interface AuthContextType {
 
 const API_BASE =
   import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000/api";
-
-declare global {
-  interface Window {
-    Razorpay: any;
-  }
-}
-
-/* ================= TYPES ================= */
 
 interface CartItem {
   id: number;
@@ -71,8 +61,6 @@ export default function Cart() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
-  /* ================= AUTH FETCH ================= */
-
   const authFetch = useCallback(async (url: string, options: RequestInit = {}) => {
 
     if (!isLoaded || !isSignedIn) return null;
@@ -81,6 +69,7 @@ export default function Cart() {
     if (!token) return null;
 
     try {
+
       const res = await fetch(url, {
         ...options,
         headers: {
@@ -90,14 +79,15 @@ export default function Cart() {
       });
 
       return res;
+
     } catch (err) {
-      console.error("Auth fetch failed:", err);
+
+      console.error(" Auth fetch failed:", err);
       return null;
+
     }
 
   }, [getToken, isLoaded, isSignedIn]);
-
-  /* ================= FETCH CART ================= */
 
   const fetchCart = useCallback(async () => {
 
@@ -109,19 +99,29 @@ export default function Cart() {
         return;
       }
 
-      const data = await res.json();
+      const text = await res.text();
+
+      let data: any;
+
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = null;
+      }
+
+      if (!res.ok) throw new Error("Cart fetch failed");
 
       setCart({
-        items: Array.isArray(data.items) ? data.items : [],
-        total_amount: data.total_amount || "0.00",
-        delivery_fee: data.delivery_fee ?? 0,
+        items: Array.isArray(data?.items) ? data.items : [],
+        total_amount: data?.total_amount || "0.00",
+        delivery_fee: data?.delivery_fee ?? 0,
       });
 
-      setDeliveryFee(data.delivery_fee ?? 0);
+      setDeliveryFee(data?.delivery_fee ?? 0);
 
     } catch (err) {
 
-      console.error("Cart fetch failed", err);
+      console.error(" Cart fetch failed", err);
 
     } finally {
 
@@ -131,8 +131,6 @@ export default function Cart() {
 
   }, [authFetch]);
 
-  /* ================= FETCH ADDRESSES ================= */
-
   const fetchAddresses = useCallback(async () => {
 
     try {
@@ -141,7 +139,7 @@ export default function Cart() {
       if (!res) return;
 
       const data = await res.json();
-      const list = data.results || data.addresses || data || [];
+      const list = data?.results || data?.addresses || data || [];
 
       setAddresses(list);
 
@@ -149,15 +147,13 @@ export default function Cart() {
         setSelectedAddress(list[0].id);
       }
 
-    } catch {
+    } catch (err) {
 
-      console.log("Address fetch failed");
+      console.error(" Address fetch failed", err);
 
     }
 
   }, [authFetch]);
-
-  /* ================= APPLY COUPON ================= */
 
   const applyCoupon = async () => {
 
@@ -188,18 +184,19 @@ export default function Cart() {
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.error || "Invalid coupon");
+        alert(data?.error || "Invalid coupon");
         return;
       }
 
-      setDiscount(data.discount_amount ?? 0);
-      setDeliveryFee(data.delivery_fee ?? deliveryFee);
-      setFinalTotal(data.final_total ?? null);
+      setDiscount(data?.discount_amount ?? 0);
+      setDeliveryFee(data?.delivery_fee ?? deliveryFee);
+      setFinalTotal(data?.final_total ?? null);
 
       alert("Coupon applied!");
 
-    } catch {
+    } catch (err) {
 
+      console.error(" Coupon error:", err);
       alert("Coupon apply failed");
 
     } finally {
@@ -210,8 +207,6 @@ export default function Cart() {
 
   };
 
-  /* ================= REMOVE ITEM ================= */
-
   const removeItem = async (id: number) => {
 
     try {
@@ -220,27 +215,21 @@ export default function Cart() {
         method: "DELETE",
       });
 
-      if (!res) {
-        alert("Authentication error");
-        return;
-      }
-
-      if (!res.ok) {
+      if (!res || !res.ok) {
         alert("Failed to remove item");
         return;
       }
 
       fetchCart();
 
-    } catch {
+    } catch (err) {
 
+      console.error(" Remove item error:", err);
       alert("Error removing item");
 
     }
 
   };
-
-  /* ================= UPDATE QUANTITY ================= */
 
   const updateQuantity = async (id: number, quantity: number) => {
 
@@ -254,27 +243,21 @@ export default function Cart() {
         body: JSON.stringify({ quantity }),
       });
 
-      if (!res) {
-        alert("Authentication error");
-        return;
-      }
-
-      if (!res.ok) {
+      if (!res || !res.ok) {
         alert("Failed to update quantity");
         return;
       }
 
       fetchCart();
 
-    } catch {
+    } catch (err) {
 
+      console.error(" Update quantity error:", err);
       alert("Error updating quantity");
 
     }
 
   };
-
-  /* ================= CHECKOUT ================= */
 
   const handleCheckout = async () => {
 
@@ -305,17 +288,58 @@ export default function Cart() {
       }
 
       const data = await res.json();
+      console.log("CHECKOUT RESPONSE:", data);
 
       if (!res.ok) {
-        alert(data.error || "Checkout failed");
+        alert(data?.error || "Checkout failed");
         return;
       }
 
-      alert("Order placed successfully!");
-      window.location.href = "/orders";
+      if (data.payment_type === "ONLINE") {
 
-    } catch {
+        const rzp = new (window as any).Razorpay({
+          key: data.key,
+          amount: data.amount,
+          currency: data.currency,
+          order_id: data.razorpay_order_id,
 
+          name: "Xotic",
+          description: "Order Payment",
+
+          handler: async (response: any) => {
+
+            await authFetch(`${API_BASE}/orders/verify-payment/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                order_id: data.order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+
+            alert("Payment successful!");
+            window.location.href = "/orders";
+          },
+
+          modal: {
+            ondismiss: () => alert("Payment cancelled"),
+          },
+        });
+
+        rzp.open();
+
+      } else {
+
+        alert("Order placed successfully!");
+        window.location.href = "/orders";
+
+      }
+
+    } catch (err) {
+
+      console.error(" Checkout error:", err);
       alert("Checkout failed");
 
     } finally {
@@ -326,8 +350,6 @@ export default function Cart() {
 
   };
 
-  /* ================= LOAD ================= */
-
   useEffect(() => {
 
     if (!isLoaded || !isSignedIn) return;
@@ -336,8 +358,6 @@ export default function Cart() {
     fetchAddresses();
 
   }, [isLoaded, isSignedIn, fetchCart, fetchAddresses]);
-
-  /* ================= TOTAL ================= */
 
   const calculatedTotal =
     finalTotal !== null
@@ -352,13 +372,9 @@ export default function Cart() {
     );
   }
 
-  /* ================= UI ================= */
-
   return (
     <div className="min-h-screen bg-[#f3e5d8] py-12 px-6">
       <div className="grid gap-10 mx-auto max-w-7xl md:grid-cols-3">
-
-        {/* CART */}
         <div className="space-y-6 md:col-span-2">
           <h1 className="text-3xl font-bold text-[#4e342e]">
             Your Cart 🛒
@@ -412,7 +428,6 @@ export default function Cart() {
           )}
         </div>
 
-        {/* SUMMARY */}
         <div className="p-8 bg-white shadow-lg rounded-2xl h-fit">
 
           <h2 className="mb-4 text-xl font-bold">Order Summary</h2>
@@ -432,7 +447,6 @@ export default function Cart() {
             Final Total: ₹ {calculatedTotal}
           </p>
 
-          {/* ADDRESS */}
           <select
             value={selectedAddress ?? ""}
             onChange={(e) =>
@@ -451,7 +465,6 @@ export default function Cart() {
             )}
           </select>
 
-          {/* COUPON */}
           <div className="flex gap-2 mt-4">
             <input
               value={coupon}
@@ -469,7 +482,6 @@ export default function Cart() {
             </button>
           </div>
 
-          {/* PAYMENT */}
           <select
             value={paymentMethod}
             onChange={(e) => setPaymentMethod(e.target.value)}
@@ -480,7 +492,6 @@ export default function Cart() {
             <option value="WALLET">Wallet</option>
           </select>
 
-          {/* CHECKOUT */}
           <button
             onClick={handleCheckout}
             disabled={loading}

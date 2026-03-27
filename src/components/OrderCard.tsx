@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { updateOrderStatus } from "../services/kitchenService";
 
 type OrderStatus =
@@ -6,6 +6,7 @@ type OrderStatus =
   | "CONFIRMED"
   | "PREPARING"
   | "READY"
+  | "COMPLETED"
   | "OUT_FOR_DELIVERY"
   | "DELIVERED"
   | "CANCELLED";
@@ -45,6 +46,22 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
 
   const [loading, setLoading] = useState(false);
 
+  // 🔥 NEW: Freeze time when order reaches final state
+  const frozenTime = useRef(order.order_age_minutes);
+
+  const getDisplayTime = () => {
+    const isFinal =
+      order.status === "DELIVERED" ||
+      order.status === "COMPLETED" ||
+      order.status === "CANCELLED";
+
+    if (isFinal) {
+      return frozenTime.current;
+    }
+
+    return order.order_age_minutes;
+  };
+
   const handleAction = async (action: string) => {
 
     if (loading) return;
@@ -52,20 +69,19 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
     try {
       setLoading(true);
 
-      console.log("🔥 ACTION:", action, "ORDER:", order.id);
+      console.log("ACTION:", action, "ORDER:", order.id);
 
       await updateOrderStatus(order.id, action as any);
 
       refresh();
 
     } catch (error: any) {
-
-      console.error("❌ Order action error:", error);
+      console.error("Order action error:", error);
       alert(error?.message || "Action failed");
-
     } finally {
       setLoading(false);
     }
+
   };
 
   const isUrgent = order.order_age_minutes > 20;
@@ -75,6 +91,7 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
     CONFIRMED: "bg-blue-500",
     PREPARING: "bg-orange-500",
     READY: "bg-purple-500",
+    COMPLETED: "bg-green-700",
     OUT_FOR_DELIVERY: "bg-indigo-500",
     DELIVERED: "bg-green-600",
     CANCELLED: "bg-red-500"
@@ -91,9 +108,7 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
     >
 
       {/* HEADER */}
-
       <div className="flex items-center justify-between mb-4">
-
         <div>
           <h2 className="text-xl font-bold text-[#4e342e]">
             Order #{order.id}
@@ -116,16 +131,13 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
                 : "text-[#8d6e63]"
             }`}
           >
-            {order.order_age_minutes} mins ago
+            {getDisplayTime()} mins ago
           </p>
         </div>
-
       </div>
 
       {/* STATUS */}
-
       <div className="flex flex-wrap gap-2 mb-4">
-
         <span
           className={`px-3 py-1 text-xs font-medium text-white rounded-full ${statusColor[order.status]}`}
         >
@@ -137,36 +149,27 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
             {order.payment_status}
           </span>
         )}
-
       </div>
 
       {/* ITEMS */}
-
       <div className="pt-4 mb-4 border-t border-[#e6d5c3]">
-
         <h4 className="mb-2 font-semibold text-[#4e342e]">
           Items ({order.total_items})
         </h4>
 
         <div className="space-y-1 text-sm text-[#5d4037]">
-
           {order.items.map((item) => (
             <div key={item.id} className="flex justify-between">
               <span>
                 {item.product_name} × {item.quantity}
               </span>
-              <span>
-                ₹ {item.total_price}
-              </span>
+              <span>₹ {item.total_price}</span>
             </div>
           ))}
-
         </div>
-
       </div>
 
       {/* DELIVERY */}
-
       {order.pidge_order_id && (
         <div className="mb-4 text-sm text-[#6d4c41] bg-[#efebe9] p-3 rounded-lg">
           🚚 Pidge Delivery
@@ -190,18 +193,27 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
         </div>
       )}
 
-      {/* ACTIONS */}
-
+      {/* ACTION BUTTONS */}
       <div className="flex flex-wrap gap-3 mt-4">
 
-        {order.status === "PENDING" && (
-          <button
-            disabled={loading}
-            onClick={() => handleAction("accept")}
-            className="px-4 py-2 text-white bg-[#5d4037] rounded-lg hover:bg-[#4e342e]"
-          >
-            Accept
-          </button>
+        {(order.status === "PENDING" || order.status === "CONFIRMED") && (
+          <>
+            <button
+              disabled={loading}
+              onClick={() => handleAction("accept")}
+              className="px-4 py-2 text-white bg-[#5d4037] rounded-lg hover:bg-[#4e342e]"
+            >
+              Accept
+            </button>
+
+            <button
+              disabled={loading}
+              onClick={() => handleAction("reject")}
+              className="px-4 py-2 text-white bg-red-500 rounded-lg hover:bg-red-600"
+            >
+              Reject
+            </button>
+          </>
         )}
 
         {order.status === "CONFIRMED" && (
@@ -227,10 +239,10 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
         {order.status === "READY" && (
           <button
             disabled={loading}
-            onClick={() => handleAction("dispatch-order")}
-            className="px-4 py-2 text-white bg-[#4e342e] rounded-lg hover:bg-[#3e2723]"
+            onClick={() => handleAction("dispatch")}
+            className="px-4 py-2 text-white bg-green-700 rounded-lg hover:bg-green-800"
           >
-            Dispatch
+            Dispatch Order
           </button>
         )}
 

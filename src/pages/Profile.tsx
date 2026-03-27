@@ -12,9 +12,6 @@ import {
 
 import L, { LatLngTuple } from "leaflet";
 import "leaflet/dist/leaflet.css";
-
-/* ================= LEAFLET FIX ================= */
-
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 
 L.Icon.Default.mergeOptions({
@@ -25,9 +22,6 @@ L.Icon.Default.mergeOptions({
   shadowUrl:
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
-
-/* ================= TYPES ================= */
-
 interface ProfileData {
   id: number;
   username: string;
@@ -53,9 +47,6 @@ interface AddressForm {
   latitude?: number;
   longitude?: number;
 }
-
-/* ================= MAP ================= */
-
 function LocationMarker({
   setCoords,
 }: {
@@ -99,7 +90,8 @@ function LocationMarker({
             "",
           pincode: addr.postcode || "",
         });
-      } catch {
+      } catch (err) {
+        console.error("Reverse geocode error:", err);
         setCoords({ latitude: lat, longitude: lng });
       }
     },
@@ -107,9 +99,6 @@ function LocationMarker({
 
   return position ? <Marker position={position} /> : null;
 }
-
-/* ================= COMPONENT ================= */
-
 const Profile = () => {
   const { user } = useAuthContext();
   const { apiRequest } = useApi();
@@ -129,9 +118,6 @@ const Profile = () => {
     city: "",
     pincode: "",
   });
-
-  /* ================= FETCH ================= */
-
   const fetchData = async () => {
     if (!user) return;
 
@@ -147,7 +133,7 @@ const Profile = () => {
       setAddresses(addressData?.results || addressData || []);
 
     } catch (err) {
-      console.error("Profile fetch error:", err);
+      console.error(" Profile fetch error:", err);
     } finally {
       setLoading(false);
     }
@@ -156,9 +142,6 @@ const Profile = () => {
   useEffect(() => {
     fetchData();
   }, [user]);
-
-  /* ================= ADD ADDRESS ================= */
-
   const handleAddAddress = async () => {
 
     if (
@@ -193,34 +176,33 @@ const Profile = () => {
         pincode: "",
       });
 
-      fetchData();
+      await fetchData(); 
 
-    } catch {
+    } catch (err) {
+      console.error(" Add address error:", err);
       alert("Failed to add address");
     } finally {
       setSaving(false);
     }
   };
-
-  /* ================= DELETE ================= */
-
   const handleDelete = async (id: number) => {
     if (!window.confirm("Delete address?")) return;
 
-    await apiRequest(`/orders/addresses/${id}/`, "DELETE");
-    fetchData();
+    try {
+      await apiRequest(`/orders/addresses/${id}/`, "DELETE");
+      await fetchData();
+    } catch (err) {
+      console.error(" Delete error:", err);
+    }
   };
 
   if (loading) return <div className="p-10 text-center">Loading...</div>;
-
-  /* ================= UI ================= */
 
   return (
     <div className="min-h-screen bg-[#f3e5d8] py-10 px-6">
 
       <div className="max-w-4xl mx-auto space-y-10">
 
-        {/* PROFILE */}
         <div className="p-8 text-center bg-white shadow-xl rounded-3xl">
           <div className="w-24 h-24 mx-auto bg-[#d7ccc8] rounded-full flex items-center justify-center text-3xl font-bold">
             {profile?.username?.charAt(0) || "U"}
@@ -230,8 +212,6 @@ const Profile = () => {
           <p>{profile?.email}</p>
           <p className="mt-2 text-gray-600">{profile?.phone}</p>
         </div>
-
-        {/* ADDRESSES */}
         <div className="p-8 bg-white shadow-xl rounded-3xl">
 
           <div className="flex justify-between mb-6">
@@ -268,8 +248,6 @@ const Profile = () => {
               </button>
             </div>
           ))}
-
-          {/* FORM */}
           {showForm && (
             <div className="mt-6 space-y-3">
 

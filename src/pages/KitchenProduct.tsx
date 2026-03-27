@@ -14,19 +14,11 @@ interface Product {
 }
 
 export default function KitchenProducts() {
-
-  const { getToken, isLoaded } = useAuth(); // ✅ CLERK
-
+  const { getToken, isLoaded } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [deletingId, setDeletingId] = useState<number | null>(null);
-
-  /* =========================
-     📦 Fetch Products
-  ========================= */
-
   const fetchProducts = async () => {
 
     try {
@@ -50,17 +42,25 @@ export default function KitchenProducts() {
         }
       );
 
-      const data = await res.json();
+      const text = await res.text();
+
+      let data: any;
+
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = null;
+      }
 
       if (!res.ok) {
-        console.error("API ERROR:", data);
+        console.error(" API ERROR:", data);
         setError("Failed to load products");
         return;
       }
 
       if (Array.isArray(data)) {
         setProducts(data);
-      } else if (Array.isArray(data.results)) {
+      } else if (Array.isArray(data?.results)) {
         setProducts(data.results);
       } else {
         setProducts([]);
@@ -68,7 +68,7 @@ export default function KitchenProducts() {
 
     } catch (err) {
 
-      console.error(err);
+      console.error(" Fetch error:", err);
       setError("Server error while loading products");
 
     } finally {
@@ -82,11 +82,6 @@ export default function KitchenProducts() {
   useEffect(() => {
     if (isLoaded) fetchProducts();
   }, [isLoaded]);
-
-  /* =========================
-     ❌ Delete Product
-  ========================= */
-
   const deleteProduct = async (id: number) => {
 
     if (!confirm("Delete this product?")) return;
@@ -96,6 +91,11 @@ export default function KitchenProducts() {
       setDeletingId(id);
 
       const token = await getToken();
+
+      if (!token) {
+        alert("Authentication required");
+        return;
+      }
 
       const res = await fetch(
         `${API_BASE}/api/products/kitchen/manage/${id}/`,
@@ -107,18 +107,28 @@ export default function KitchenProducts() {
         }
       );
 
+      const text = await res.text();
+
+      let data: any;
+
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = null;
+      }
+
       if (!res.ok) {
+        console.error(" Delete error:", data);
         alert("Failed to delete product");
         return;
       }
-
       setProducts((prev) =>
         prev.filter((p) => p.id !== id)
       );
 
     } catch (err) {
 
-      console.error(err);
+      console.error(" Delete exception:", err);
       alert("Error deleting product");
 
     } finally {
@@ -128,11 +138,6 @@ export default function KitchenProducts() {
     }
 
   };
-
-  /* =========================
-     🌀 Loading
-  ========================= */
-
   if (!isLoaded || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -140,11 +145,6 @@ export default function KitchenProducts() {
       </div>
     );
   }
-
-  /* =========================
-     ❌ Error
-  ========================= */
-
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -154,17 +154,10 @@ export default function KitchenProducts() {
       </div>
     );
   }
-
-  /* =========================
-     UI
-  ========================= */
-
   return (
     <div className="min-h-screen bg-[#f3e5d8] p-10">
 
       <div className="max-w-5xl mx-auto">
-
-        {/* Header */}
         <div className="flex items-center justify-between mb-8">
 
           <h1 className="text-3xl font-bold text-[#4e342e]">
@@ -179,8 +172,6 @@ export default function KitchenProducts() {
           </Link>
 
         </div>
-
-        {/* Empty */}
         {products.length === 0 ? (
 
           <div className="p-10 text-center bg-white shadow-md rounded-2xl">
@@ -204,6 +195,7 @@ export default function KitchenProducts() {
                   <img
                     src={product.image}
                     alt={product.name}
+                    loading="lazy" 
                     onError={(e) => {
                       (e.currentTarget as HTMLImageElement).src =
                         "https://via.placeholder.com/300x200?text=No+Image";

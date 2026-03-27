@@ -18,23 +18,20 @@ const Wallet = () => {
   const [amount, setAmount] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-
-  /* =============================
-     FETCH WALLET
-  ============================= */
-
   const fetchWallet = async () => {
 
     if (!user) return;
 
     try {
 
+      setLoading(true); 
+
       const data: WalletData = await apiRequest(`/users/wallet/`);
       setWallet(data || null);
 
     } catch (error) {
 
-      console.error("Wallet fetch error:", error);
+      console.error(" Wallet fetch error:", error);
       setWallet(null);
 
     } finally {
@@ -43,16 +40,13 @@ const Wallet = () => {
 
     }
   };
-
-  /* =============================
-     ADD MONEY
-  ============================= */
-
   const addMoney = async () => {
 
     const numAmount = Number(amount);
-
-    if (!numAmount || numAmount <= 0) return;
+    if (!numAmount || numAmount <= 0) {
+      console.error("Invalid amount");
+      return;
+    }
 
     try {
 
@@ -65,11 +59,11 @@ const Wallet = () => {
       );
 
       setAmount("");
-      fetchWallet();
+      await fetchWallet(); 
 
     } catch (error) {
 
-      console.error("Add money error:", error);
+      console.error(" Add money error:", error);
 
     } finally {
 
@@ -81,11 +75,6 @@ const Wallet = () => {
   useEffect(() => {
     fetchWallet();
   }, [user]);
-
-  /* =============================
-     LOADING
-  ============================= */
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#fdf6f0]">
@@ -95,30 +84,18 @@ const Wallet = () => {
       </div>
     );
   }
-
-  /* =============================
-     UI
-  ============================= */
-
   return (
     <div className="min-h-screen bg-[#fdf6f0] flex items-center justify-center px-4">
-
       <div className="w-full max-w-md p-8 bg-white shadow-2xl rounded-3xl">
-
-        {/* TITLE */}
         <h1 className="text-3xl font-bold text-center text-[#5a2d0c] mb-8">
           My Wallet
         </h1>
-
-        {/* BALANCE */}
         <div className="bg-gradient-to-r from-[#5a2d0c] to-[#7a3a10] text-white rounded-2xl p-6 mb-8 shadow-xl">
           <p className="text-sm opacity-80">Available Balance</p>
           <h2 className="mt-2 text-4xl font-bold">
             ₹ {wallet?.balance ?? 0}
           </h2>
         </div>
-
-        {/* QUICK BUTTONS */}
         <div className="grid grid-cols-3 gap-3 mb-6">
           {[100, 200, 500].map((val) => (
             <button
@@ -130,8 +107,6 @@ const Wallet = () => {
             </button>
           ))}
         </div>
-
-        {/* INPUT */}
         <input
           type="number"
           value={amount}
@@ -139,8 +114,6 @@ const Wallet = () => {
           placeholder="Enter custom amount"
           className="w-full p-3 mb-4 border border-[#e5d5c5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#7a3a10]"
         />
-
-        {/* BUTTON */}
         <button
           onClick={addMoney}
           disabled={processing || Number(amount) <= 0}
@@ -152,8 +125,6 @@ const Wallet = () => {
         >
           {processing ? "Processing..." : "Add Money"}
         </button>
-
-        {/* SUMMARY */}
         <div className="mt-6 text-sm text-[#5a2d0c] space-y-1">
           <p>Total Credit: ₹ {wallet?.total_credit ?? 0}</p>
           <p>Total Debit: ₹ {wallet?.total_debit ?? 0}</p>

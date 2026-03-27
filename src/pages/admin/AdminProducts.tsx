@@ -1,12 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useAuth } from "@clerk/clerk-react";
-
-/* ================= CONFIG ================= */
-
 const API_BASE =
-  import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
-
-/* ================= TYPES ================= */
+  import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000"
 
 interface Product {
   id: number;
@@ -25,7 +20,7 @@ interface PaginatedResponse {
 
 const AdminProducts = () => {
 
-  const { getToken } = useAuth(); // ✅ CLERK
+  const { getToken, isLoaded, isSignedIn } = useAuth();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -34,59 +29,58 @@ const AdminProducts = () => {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [nextUrl, setNextUrl] = useState<string | null>(null);
-  const [prevUrl, setPrevUrl] = useState<string | null>(null);
-
-  /* =====================================================
-     AUTH FETCH (CLERK FIX)
-  ===================================================== */
-
+  const [prevUrl, setPrevUrl] = useState<string | null>(null)
   const authFetch = useCallback(async (url: string, options: RequestInit = {}) => {
 
-    const token = await getToken();
+    if (!isLoaded || !isSignedIn) return null;
 
-    if (!token) return null;
+    try {
 
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        ...(options.headers || {}),
-        Authorization: `Bearer ${token}`, // ✅ FIXED
-      },
-    });
+      const token = await getToken();
 
-    return res;
+      if (!token) return null;
 
-  }, [getToken]);
+      return await fetch(url, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {}),
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-  /* =====================================================
-     SAFE FETCH
-  ===================================================== */
+    } catch (err) {
+
+      console.error(" Auth fetch error:", err);
+      return null;
+
+    }
+
+  }, [getToken, isLoaded, isSignedIn]);
 
   const safeFetch = useCallback(async (url: string, options?: RequestInit) => {
 
     const res = await authFetch(url, options);
+
     if (!res) throw new Error("Server unreachable");
 
-    const contentType = res.headers.get("content-type");
+    const text = await res.text();
 
-    if (!contentType?.includes("application/json")) {
-      throw new Error("Invalid server response.");
+    let data: any;
+
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      throw new Error("Invalid server response");
     }
 
-    const data = await res.json();
-
     if (!res.ok) {
-      throw new Error(data?.error || data?.message || "Request failed.");
+      throw new Error(data?.error || data?.message || "Request failed");
     }
 
     return data;
 
   }, [authFetch]);
-
-  /* =====================================================
-     FETCH PRODUCTS
-  ===================================================== */
-
   const fetchProducts = useCallback(async (url?: string) => {
 
     try {
@@ -117,6 +111,7 @@ const AdminProducts = () => {
 
     } catch (err: any) {
 
+      console.error(" Fetch error:", err);
       setError(err.message);
 
     } finally {
@@ -128,13 +123,10 @@ const AdminProducts = () => {
   }, [safeFetch]);
 
   useEffect(() => {
-    fetchProducts(); // ✅ removed auth.access dependency
-  }, [fetchProducts]);
-
-  /* =====================================================
-     AUTO CLEAR ALERTS
-  ===================================================== */
-
+    if (isLoaded && isSignedIn) {
+      fetchProducts();
+    }
+  }, [fetchProducts, isLoaded, isSignedIn]);
   useEffect(() => {
 
     if (error || successMsg) {
@@ -150,10 +142,6 @@ const AdminProducts = () => {
 
   }, [error, successMsg]);
 
-  /* =====================================================
-     UPDATE STOCK
-  ===================================================== */
-
   const updateStock = async (id: number, type: "increase" | "decrease") => {
 
     try {
@@ -165,7 +153,6 @@ const AdminProducts = () => {
         `${API_BASE}/api/products/admin/products/${id}/${type}_stock/`,
         {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ amount: 1 }),
         }
       );
@@ -188,6 +175,7 @@ const AdminProducts = () => {
 
     } catch (err: any) {
 
+      console.error("Stock update error:", err);
       setError(err.message);
       fetchProducts();
 
@@ -198,11 +186,6 @@ const AdminProducts = () => {
     }
 
   };
-
-  /* =====================================================
-     TOGGLE AVAILABILITY
-  ===================================================== */
-
   const toggleAvailability = async (id: number) => {
 
     try {
@@ -227,6 +210,7 @@ const AdminProducts = () => {
 
     } catch (err: any) {
 
+      console.error(" Toggle error:", err);
       setError(err.message);
       fetchProducts();
 
@@ -237,21 +221,11 @@ const AdminProducts = () => {
     }
 
   };
-
-  /* =====================================================
-     FILTER
-  ===================================================== */
-
   const filteredProducts = useMemo(() => {
     return products.filter((product) =>
       product.name.toLowerCase().includes(search.toLowerCase())
     );
   }, [products, search]);
-
-  /* =====================================================
-     UI (UNCHANGED)
-  ===================================================== */
-
   return (
     <div className="relative space-y-6">
 
