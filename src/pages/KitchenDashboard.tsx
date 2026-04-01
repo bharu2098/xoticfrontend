@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getKitchenDashboard, updateKitchenStatus } from "../services/kitchenService";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthContext } from "../context/AuthContext";
@@ -29,13 +29,20 @@ interface DashboardData {
     cancellation_rate_percent: number;
   };
 }
+
 const KitchenDashboard = () => {
+
   const { user, isKitchenStaff } = useAuthContext();
   const navigate = useNavigate();
+
   const [data, setData] = useState<DashboardData | null>(null);
   const [range, setRange] = useState("weekly");
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // ==============================
+  // 🔐 AUTH GUARD
+  // ==============================
   useEffect(() => {
 
     if (!user) return;
@@ -47,13 +54,18 @@ const KitchenDashboard = () => {
   }, [user, isKitchenStaff, navigate]);
 
   if (!user) return null;
-  const loadDashboard = async () => {
+
+  // ==============================
+  // 📊 LOAD DASHBOARD (STABLE)
+  // ==============================
+  const loadDashboard = useCallback(async () => {
 
     try {
 
       setLoading(true);
 
       const res = await getKitchenDashboard(range);
+
       if (!res || typeof res !== "object") {
         throw new Error("Invalid dashboard response");
       }
@@ -71,12 +83,35 @@ const KitchenDashboard = () => {
 
     }
 
-  };
+  }, [range]);
 
+  // ==============================
+  // 🔄 FETCH ON CHANGE
+  // ==============================
   useEffect(() => {
-    if (user) loadDashboard();
-  }, [range, user]);
+    if (user) {
+      loadDashboard();
+    }
+  }, [range, user, loadDashboard]);
 
+  // ==============================
+  // 🔁 AUTO REFRESH (ADDED)
+  // ==============================
+  useEffect(() => {
+
+    if (!user) return;
+
+    const interval = setInterval(() => {
+      loadDashboard();
+    }, 15000); // every 15s
+
+    return () => clearInterval(interval);
+
+  }, [user, loadDashboard]);
+
+  // ==============================
+  // ⚙️ STATUS CHANGE
+  // ==============================
   const handleStatusChange = async (status: DashboardData["status"]) => {
 
     if (!data || data.status === status || loadingStatus) return;
@@ -86,6 +121,7 @@ const KitchenDashboard = () => {
       setLoadingStatus(true);
 
       const res = await updateKitchenStatus(status);
+
       if (!res || !res.status) {
         throw new Error("Invalid status response");
       }
@@ -106,6 +142,10 @@ const KitchenDashboard = () => {
     }
 
   };
+
+  // ==============================
+  // 🎨 STATUS COLOR
+  // ==============================
   const getStatusColor = (status: string) => {
 
     switch (status) {
@@ -127,6 +167,10 @@ const KitchenDashboard = () => {
     }
 
   };
+
+  // ==============================
+  // ⏳ LOADING
+  // ==============================
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -137,6 +181,9 @@ const KitchenDashboard = () => {
     );
   }
 
+  // ==============================
+  // ❌ ERROR
+  // ==============================
   if (!data) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -144,6 +191,10 @@ const KitchenDashboard = () => {
       </div>
     );
   }
+
+  // ==============================
+  // 🧱 UI
+  // ==============================
   return (
 
     <div className="min-h-screen bg-[#f3e5d8] py-10 px-6">
@@ -250,9 +301,7 @@ const KitchenDashboard = () => {
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
 
           <Card title="Total Orders" value={data.summary.total_orders} />
-
           <Card title="Completed Orders" value={data.summary.completed_orders} />
-
           <Card title="Cancelled Orders" value={data.summary.cancelled_orders} />
 
           <Card
@@ -269,6 +318,7 @@ const KitchenDashboard = () => {
   );
 
 };
+
 const Card = ({ title, value }: any) => (
 
   <div className="p-6 transition bg-white shadow-md rounded-3xl hover:shadow-lg">

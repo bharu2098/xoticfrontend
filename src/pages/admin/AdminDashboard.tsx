@@ -70,7 +70,7 @@ const AdminDashboard = () => {
         }
 
         const statsRes = await fetch(
-          `${API_BASE}/api/orders/admin/analytics/`,
+          `${API_BASE}/orders/admin/analytics/`,
           {
             headers: {
               Authorization: `Bearer ${token}`,

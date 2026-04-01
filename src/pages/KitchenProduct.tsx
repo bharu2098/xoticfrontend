@@ -14,11 +14,37 @@ interface Product {
 }
 
 export default function KitchenProducts() {
-  const { getToken, isLoaded } = useAuth();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  // ==============================
+  // 🔐 TOKEN HELPER (ADDED)
+  // ==============================
+  const getClerkToken = async () => {
+
+    if (!isLoaded || !isSignedIn) return null;
+
+    let token: string | null = null;
+
+    for (let i = 0; i < 3; i++) {
+      try {
+        token = await getToken({ template: "default" });
+        if (token) break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+
+    return token;
+  };
+
+  // ==============================
+  // 📦 FETCH PRODUCTS
+  // ==============================
   const fetchProducts = async () => {
 
     try {
@@ -26,7 +52,7 @@ export default function KitchenProducts() {
       setLoading(true);
       setError(null);
 
-      const token = await getToken();
+      const token = await getClerkToken();
 
       if (!token) {
         setError("Authentication required");
@@ -80,8 +106,12 @@ export default function KitchenProducts() {
   };
 
   useEffect(() => {
-    if (isLoaded) fetchProducts();
-  }, [isLoaded]);
+    if (isLoaded && isSignedIn) fetchProducts();
+  }, [isLoaded, isSignedIn]);
+
+  // ==============================
+  // ❌ DELETE PRODUCT
+  // ==============================
   const deleteProduct = async (id: number) => {
 
     if (!confirm("Delete this product?")) return;
@@ -90,7 +120,7 @@ export default function KitchenProducts() {
 
       setDeletingId(id);
 
-      const token = await getToken();
+      const token = await getClerkToken();
 
       if (!token) {
         alert("Authentication required");
@@ -122,6 +152,7 @@ export default function KitchenProducts() {
         alert("Failed to delete product");
         return;
       }
+
       setProducts((prev) =>
         prev.filter((p) => p.id !== id)
       );
@@ -138,6 +169,10 @@ export default function KitchenProducts() {
     }
 
   };
+
+  // ==============================
+  // ⏳ LOADING
+  // ==============================
   if (!isLoaded || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -145,6 +180,10 @@ export default function KitchenProducts() {
       </div>
     );
   }
+
+  // ==============================
+  // ❌ ERROR
+  // ==============================
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -154,10 +193,15 @@ export default function KitchenProducts() {
       </div>
     );
   }
+
+  // ==============================
+  // 🧱 UI
+  // ==============================
   return (
     <div className="min-h-screen bg-[#f3e5d8] p-10">
 
       <div className="max-w-5xl mx-auto">
+
         <div className="flex items-center justify-between mb-8">
 
           <h1 className="text-3xl font-bold text-[#4e342e]">
@@ -172,6 +216,7 @@ export default function KitchenProducts() {
           </Link>
 
         </div>
+
         {products.length === 0 ? (
 
           <div className="p-10 text-center bg-white shadow-md rounded-2xl">
@@ -195,7 +240,7 @@ export default function KitchenProducts() {
                   <img
                     src={product.image}
                     alt={product.name}
-                    loading="lazy" 
+                    loading="lazy"
                     onError={(e) => {
                       (e.currentTarget as HTMLImageElement).src =
                         "https://via.placeholder.com/300x200?text=No+Image";

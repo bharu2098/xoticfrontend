@@ -93,6 +93,9 @@ interface UpdateOrderResponse {
   status: OrderStatus;
 }
 
+// ==============================
+// 🔐 CLERK TOKEN HANDLER
+// ==============================
 let clerkTokenGetter: (() => Promise<string | null>) | null = null;
 
 export const setClerkTokenGetter = (
@@ -101,9 +104,13 @@ export const setClerkTokenGetter = (
   clerkTokenGetter = getter;
 };
 
+// ==============================
+// 🔑 AUTH HEADERS
+// ==============================
 const getAuthHeaders = async (): Promise<Record<string, string>> => {
   let token: string | null = null;
 
+  // retry to avoid race condition
   for (let i = 0; i < 5; i++) {
     if (clerkTokenGetter) {
       try {
@@ -121,17 +128,21 @@ const getAuthHeaders = async (): Promise<Record<string, string>> => {
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   } else {
-    console.warn("No Clerk token available");
+    console.warn("⚠️ No Clerk token available");
   }
 
   return headers;
 };
 
+// ==============================
+// 🌐 API REQUEST
+// ==============================
 export const apiRequest = async <T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> => {
   const url = `${API_BASE}${endpoint}`;
+
   const authHeaders = await getAuthHeaders();
 
   const finalHeaders: Record<string, string> = {
@@ -150,14 +161,17 @@ export const apiRequest = async <T>(
 
   console.log("API:", endpoint, response.status);
 
+  // 🔴 AUTH FAIL
   if (response.status === 401) {
     throw new Error("Session expired. Please login again.");
   }
 
+  // 🔴 PERMISSION FAIL
   if (response.status === 403) {
     throw new Error("Permission denied.");
   }
 
+  // 🔴 OTHER ERRORS
   if (!response.ok) {
     let message = `Server error (${response.status})`;
 
@@ -173,6 +187,7 @@ export const apiRequest = async <T>(
     throw new Error(message);
   }
 
+  // ✅ NO CONTENT
   if (response.status === 204) {
     return {} as T;
   }
@@ -180,6 +195,9 @@ export const apiRequest = async <T>(
   return response.json() as Promise<T>;
 };
 
+// ==============================
+// 🔌 WEBSOCKET
+// ==============================
 export const createKitchenSocket = async () => {
   if (!clerkTokenGetter) return null;
 
@@ -201,6 +219,9 @@ export const createKitchenSocket = async () => {
   return ws;
 };
 
+// ==============================
+// 📊 API FUNCTIONS
+// ==============================
 export const getKitchenDashboard = (
   range: string = "weekly"
 ): Promise<KitchenDashboardResponse> => {
@@ -232,7 +253,9 @@ export const getKitchenOrders = async (
   return [];
 };
 
-/// ✅🔥 FIXED (PATCH → POST)
+// ==============================
+// 🔄 ORDER ACTIONS
+// ==============================
 export const updateOrderStatus = (
   orderId: number,
   action: KitchenOrderAction
@@ -243,7 +266,6 @@ export const updateOrderStatus = (
   );
 };
 
-/// ✅🔥 FIXED
 export const completeOrder = (
   orderId: number
 ): Promise<UpdateOrderResponse> => {
@@ -253,7 +275,6 @@ export const completeOrder = (
   );
 };
 
-/// ✅🔥 FIXED
 export const simulateDeliveryComplete = (
   orderId: number
 ): Promise<UpdateOrderResponse> => {

@@ -4,7 +4,7 @@ import { useAuth } from "@clerk/clerk-react";
 const API_ROOT =
   import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 
-const REFUND_API = `${API_ROOT}/api/orders/admin/refunds`;
+const REFUND_API = `${API_ROOT}/orders/admin/refunds`;
 
 interface Refund {
   id: number;

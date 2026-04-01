@@ -12,6 +12,7 @@ import {
 
 import L, { LatLngTuple } from "leaflet";
 import "leaflet/dist/leaflet.css";
+
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 
 L.Icon.Default.mergeOptions({
@@ -22,6 +23,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl:
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
+
 interface ProfileData {
   id: number;
   username: string;
@@ -47,6 +49,10 @@ interface AddressForm {
   latitude?: number;
   longitude?: number;
 }
+
+// ==============================
+// 📍 MAP MARKER (SAFE)
+// ==============================
 function LocationMarker({
   setCoords,
 }: {
@@ -57,20 +63,24 @@ function LocationMarker({
 
   useMapEvents({
     async click(e) {
+
       const lat = Number(e.latlng.lat.toFixed(6));
       const lng = Number(e.latlng.lng.toFixed(6));
+
+      if (isNaN(lat) || isNaN(lng)) return;
 
       const newPos: LatLngTuple = [lat, lng];
       setPosition(newPos);
       map.flyTo(newPos, 16);
 
       try {
+
         const res = await fetch(
           `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
         );
 
         const data = await res.json();
-        const addr = data.address || {};
+        const addr = data?.address || {};
 
         setCoords({
           latitude: lat,
@@ -90,16 +100,28 @@ function LocationMarker({
             "",
           pincode: addr.postcode || "",
         });
+
       } catch (err) {
+
         console.error("Reverse geocode error:", err);
-        setCoords({ latitude: lat, longitude: lng });
+
+        setCoords({
+          latitude: lat,
+          longitude: lng,
+        });
+
       }
     },
   });
 
   return position ? <Marker position={position} /> : null;
 }
+
+// ==============================
+// 👤 PROFILE COMPONENT
+// ==============================
 const Profile = () => {
+
   const { user } = useAuthContext();
   const { apiRequest } = useApi();
 
@@ -109,7 +131,7 @@ const Profile = () => {
 
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [newAddress, setNewAddress] = useState<AddressForm>({
     full_name: "",
     phone_number: "",
@@ -118,10 +140,18 @@ const Profile = () => {
     city: "",
     pincode: "",
   });
+
+  // ==============================
+  // 📦 FETCH DATA (SAFE)
+  // ==============================
   const fetchData = async () => {
+
     if (!user) return;
 
+    let isMounted = true;
+
     try {
+
       setLoading(true);
 
       const [profileData, addressData]: any = await Promise.all([
@@ -129,27 +159,52 @@ const Profile = () => {
         apiRequest(`/orders/addresses/`),
       ]);
 
+      if (!isMounted) return;
+
       setProfile(profileData || null);
-      setAddresses(addressData?.results || addressData || []);
+
+      if (Array.isArray(addressData?.results)) {
+        setAddresses(addressData.results);
+      } else if (Array.isArray(addressData)) {
+        setAddresses(addressData);
+      } else {
+        setAddresses([]);
+      }
 
     } catch (err) {
+
       console.error(" Profile fetch error:", err);
+
     } finally {
-      setLoading(false);
+
+      if (isMounted) setLoading(false);
+
     }
+
+    return () => {
+      isMounted = false;
+    };
   };
 
   useEffect(() => {
-    fetchData();
+    if (user) {
+      fetchData();
+    }
   }, [user]);
+
+  // ==============================
+  // ➕ ADD ADDRESS
+  // ==============================
   const handleAddAddress = async () => {
 
+    if (saving) return;
+
     if (
-      !newAddress.full_name ||
-      !newAddress.phone_number ||
-      !newAddress.address_line ||
-      !newAddress.city ||
-      !newAddress.pincode
+      !newAddress.full_name?.trim() ||
+      !newAddress.phone_number?.trim() ||
+      !newAddress.address_line?.trim() ||
+      !newAddress.city?.trim() ||
+      !newAddress.pincode?.trim()
     ) {
       alert("Fill all fields");
       return;
@@ -161,9 +216,22 @@ const Profile = () => {
     }
 
     try {
+
       setSaving(true);
 
-      await apiRequest(`/orders/addresses/`, "POST", newAddress);
+      if (editingId) {
+  await apiRequest(`/orders/addresses/${editingId}/`, "PUT", {
+    ...newAddress,
+    latitude: Number(newAddress.latitude),
+    longitude: Number(newAddress.longitude),
+  });
+} else {
+  await apiRequest(`/orders/addresses/`, "POST", {
+    ...newAddress,
+    latitude: Number(newAddress.latitude),
+    longitude: Number(newAddress.longitude),
+  });
+}
 
       setShowForm(false);
 
@@ -176,45 +244,80 @@ const Profile = () => {
         pincode: "",
       });
 
-      await fetchData(); 
+      await fetchData();
 
     } catch (err) {
+
       console.error(" Add address error:", err);
       alert("Failed to add address");
+
     } finally {
+
       setSaving(false);
+
     }
   };
+
+  // ==============================
+  // ❌ DELETE ADDRESS
+  // ==============================
   const handleDelete = async (id: number) => {
+
     if (!window.confirm("Delete address?")) return;
 
     try {
+
       await apiRequest(`/orders/addresses/${id}/`, "DELETE");
-      await fetchData();
+
+      setAddresses((prev) => prev.filter((a) => a.id !== id));
+
     } catch (err) {
+
       console.error(" Delete error:", err);
+
     }
   };
 
   if (loading) return <div className="p-10 text-center">Loading...</div>;
+  const handleEdit = (addr: Address) => {
+  setEditingId(addr.id);
+  setShowForm(true);
+
+  setNewAddress({
+    full_name: addr.full_name,
+    phone_number: "",
+    address_line: addr.address_line,
+    landmark: "",
+    city: addr.city,
+    pincode: addr.pincode,
+  });
+};
 
   return (
+
     <div className="min-h-screen bg-[#f3e5d8] py-10 px-6">
 
       <div className="max-w-4xl mx-auto space-y-10">
 
         <div className="p-8 text-center bg-white shadow-xl rounded-3xl">
+
           <div className="w-24 h-24 mx-auto bg-[#d7ccc8] rounded-full flex items-center justify-center text-3xl font-bold">
             {profile?.username?.charAt(0) || "U"}
           </div>
 
-          <h1 className="mt-4 text-2xl font-bold">{profile?.username}</h1>
+          <h1 className="mt-4 text-2xl font-bold">
+            {profile?.username}
+          </h1>
+
           <p>{profile?.email}</p>
           <p className="mt-2 text-gray-600">{profile?.phone}</p>
+
         </div>
+
         <div className="p-8 bg-white shadow-xl rounded-3xl">
 
           <div className="flex justify-between mb-6">
+
             <h2 className="text-xl font-bold">My Addresses</h2>
 
             <button
@@ -223,6 +326,7 @@ const Profile = () => {
             >
               + Add Address
             </button>
+
           </div>
 
           {addresses.length === 0 && (
@@ -230,25 +334,40 @@ const Profile = () => {
           )}
 
           {addresses.map((a) => (
+
             <div
               key={a.id}
               className="flex justify-between p-4 mb-3 bg-[#efebe9] rounded-xl"
             >
+
               <div>
                 <p className="font-semibold">{a.full_name}</p>
                 <p>{a.address_line}</p>
                 <p>{a.city} - {a.pincode}</p>
               </div>
 
-              <button
-                onClick={() => handleDelete(a.id)}
-                className="text-red-600"
-              >
-                Delete
-              </button>
+              <div className="flex items-center gap-3">
+  <button
+    onClick={() => handleEdit(a)}
+    className="text-blue-600"
+  >
+    Edit
+  </button>
+
+  <button
+    onClick={() => handleDelete(a.id)}
+    className="text-red-600"
+  >
+    Delete
+  </button>
+</div>
+
             </div>
+
           ))}
+
           {showForm && (
+
             <div className="mt-6 space-y-3">
 
               <input className="w-full p-2 border rounded"
@@ -315,10 +434,15 @@ const Profile = () => {
                   saving ? "bg-gray-400" : "bg-black"
                 }`}
               >
-                {saving ? "Saving..." : "Save Address"}
+               {saving
+  ? "Saving..."
+  : editingId
+  ? "Update Address"
+  : "Save Address"}
               </button>
 
             </div>
+
           )}
 
         </div>

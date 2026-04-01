@@ -35,7 +35,7 @@ const AdminPayments = () => {
   const fetchPayments = async () => {
     try {
       const token = await getToken();
-      const res = await fetch(`${API_BASE}/api/orders/admin/payments/`, {
+      const res = await fetch(`${API_BASE}/orders/admin/payments/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();

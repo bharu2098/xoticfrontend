@@ -171,23 +171,50 @@ export default function AdminCoupons() {
   };
 
   /* ================= TOGGLE ================= */
+  const toggleStatus = async (id: number, currentStatus: boolean) => {
+  const token = await waitForToken();
+  if (!token) return;
 
-  const toggleStatus = async (id: number) => {
-    const token = await waitForToken();
-    if (!token) return;
+  try {
+    // ✅ Optimistic UI update (NO BLINK)
+    setCoupons((prev) =>
+      prev.map((c) =>
+        c.id === id ? { ...c, is_active: !currentStatus } : c
+      )
+    );
 
-    await fetch(
-      `${API_BASE}/orders/admin/coupons/${id}/toggle_status/`,
+    const res = await fetch(
+      `${API_BASE}/orders/admin/coupons/${id}/`,
       {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          is_active: !currentStatus,
+        }),
       }
     );
 
-    fetchCoupons();
-  };
+    if (!res.ok) {
+      console.error("Toggle failed:", res.status);
+
+      // 🔁 rollback if failed
+      setCoupons((prev) =>
+        prev.map((c) =>
+          c.id === id ? { ...c, is_active: currentStatus } : c
+        )
+      );
+    }
+
+    // ❌ REMOVE this line (this causes blink)
+    // fetchCoupons();
+
+  } catch (err) {
+    console.error("Toggle error:", err);
+  }
+};
 
   /* ================= DELETE ================= */
 
@@ -304,7 +331,7 @@ export default function AdminCoupons() {
                       <td style={actionCell}>
                         <button
                           style={c.is_active ? deactivateBtn : activateBtn}
-                          onClick={() => toggleStatus(c.id)}
+                          onClick={() => toggleStatus(c.id, c.is_active)}
                         >
                           {c.is_active ? "Deactivate" : "Activate"}
                         </button>

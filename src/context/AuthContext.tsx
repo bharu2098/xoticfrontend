@@ -6,9 +6,9 @@ import {
   ReactNode,
 } from "react";
 import { useAuth } from "@clerk/clerk-react";
-const API_BASE =
-  import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 
+const API_BASE =
+  import.meta.env.VITE_API_BASE || "https://xjxxn6wc-8000.inc1.devtunnels.ms/api";
 
 interface UserProfile {
   id: number;
@@ -29,22 +29,23 @@ interface AuthContextType {
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
+
 export const AuthProvider = ({
   children,
 }: {
   children: ReactNode;
 }) => {
-
   const { getToken, signOut, isSignedIn, isLoaded } = useAuth();
 
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // =============================
+  // FETCH PROFILE
+  // =============================
   const fetchProfile = async (token: string) => {
-
     try {
-
-      const res = await fetch(`${API_BASE}/api/users/me/`, {
+      const res = await fetch(`${API_BASE}/users/me/`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -53,49 +54,43 @@ export const AuthProvider = ({
       const text = await res.text();
 
       let data: any;
-
       try {
         data = text ? JSON.parse(text) : null;
       } catch {
         data = null;
       }
 
+      // 🔥 IMPORTANT FIX
       if (!res.ok) {
-        console.error(" Profile fetch failed:", data || res.status);
-        setUser(null);
-        return;
+        console.warn("Profile not ready yet, skipping...");
+        return; // ❌ DON'T set user null here
       }
 
       if (!data?.user) {
-        console.warn(" Invalid profile response");
-        setUser(null);
+        console.warn("Invalid profile response");
         return;
       }
 
-      console.log(" PROFILE:", data);
+      console.log("PROFILE:", data);
 
       setUser(data.user);
-
     } catch (err) {
-
-      console.error(" Fetch error:", err);
-      setUser(null);
-
+      console.error("Fetch error:", err);
+      // ❌ DON'T force logout here
     }
-
   };
 
+  // =============================
+  // WAIT FOR TOKEN
+  // =============================
   const waitForToken = async (): Promise<string | null> => {
-
     try {
-
       let token: string | null = null;
 
       for (let i = 0; i < 5; i++) {
-
         token = await getToken({ template: "default" });
 
-        console.log(` TOKEN TRY ${i + 1}:`, token);
+        console.log(`TOKEN TRY ${i + 1}:`, token);
 
         if (token) return token;
 
@@ -103,78 +98,69 @@ export const AuthProvider = ({
       }
 
       return null;
-
     } catch (err) {
-
-      console.error(" Token error:", err);
+      console.error("Token error:", err);
       return null;
-
     }
-
   };
-  useEffect(() => {
 
+  // =============================
+  // LOAD USER (FIXED)
+  // =============================
+  useEffect(() => {
     if (!isLoaded) return;
 
     const loadUser = async () => {
-
-      setLoading(true);
-
       try {
+        setLoading(true);
 
+        // 🔥 NOT SIGNED IN
         if (!isSignedIn) {
           setUser(null);
+          setLoading(false);
           return;
         }
 
+        // 🔥 WAIT FOR TOKEN
         const token = await waitForToken();
 
         if (!token) {
-          console.warn(" No token after retries");
-          setUser(null);
+          console.warn("Token not ready yet, retry later...");
+          setLoading(true); // keep loading, don't logout
           return;
         }
 
-        console.log(" FINAL TOKEN:", token);
+        console.log("FINAL TOKEN:", token);
 
         await fetchProfile(token);
-
       } catch (err) {
-
-        console.error(" Auth load error:", err);
+        console.error("Auth load error:", err);
         setUser(null);
-
       } finally {
-
         setLoading(false);
-
       }
-
     };
 
     loadUser();
-
   }, [isLoaded, isSignedIn]);
+
+  // =============================
+  // LOGOUT
+  // =============================
   const logout = async () => {
-
     try {
-
       await signOut();
-
     } catch (err) {
-
-      console.error(" Logout error:", err);
-
+      console.error("Logout error:", err);
     } finally {
-
       setUser(null);
-
     }
-
   };
+
   const isAdmin = user?.role === "admin";
   const isKitchenStaff = user?.role === "kitchenstaff";
   const isDeliveryPartner = user?.role === "delivery";
+
   return (
     <AuthContext.Provider
       value={{
@@ -193,8 +179,10 @@ export const AuthProvider = ({
   );
 };
 
+// =============================
+// HOOK
+// =============================
 export const useAuthContext = () => {
-
   const context = useContext(AuthContext);
 
   if (!context) {

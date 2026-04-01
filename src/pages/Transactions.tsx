@@ -24,34 +24,68 @@ const Transactions = () => {
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [nextPage, setNextPage] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+
+  // ==============================
+  // 📦 FETCH TRANSACTIONS (SAFE)
+  // ==============================
   const fetchTransactions = async (url?: string) => {
 
-    if (!user) return;
+    if (!user) {
+      console.warn("⚠️ No user, skipping transactions fetch");
+      return;
+    }
 
     try {
-      if (!url) setLoading(true);
 
-      const endpoint = url
-        ? url.replace("http://127.0.0.1:8000/api", "")
-        : `/users/transactions/history/`;
+      url ? setLoadingMore(true) : setLoading(true);
+      setError("");
+
+      let endpoint = `/users/transactions/history/`;
+
+      if (url) {
+        try {
+          const parsed = new URL(url);
+
+          // ✅ FIXED: DO NOT REMOVE /api
+          endpoint = parsed.pathname + parsed.search;
+
+        } catch {
+          endpoint = url;
+        }
+      }
+
+      console.log("📡 TRANSACTION ENDPOINT:", endpoint);
 
       const data: PaginatedResponse = await apiRequest(endpoint);
 
+      console.log("✅ TRANSACTION RESPONSE:", data);
+
+      if (!data || typeof data !== "object") {
+        throw new Error("Invalid response from server");
+      }
+
+      const newItems = Array.isArray(data.results)
+        ? data.results
+        : [];
+
       setTransactions((prev) =>
         url
-          ? [...prev, ...(data.results || [])]
-          : (data.results || [])
+          ? [...prev, ...newItems]
+          : newItems
       );
 
       setNextPage(data.next || null);
 
-    } catch (err) {
+    } catch (err: any) {
 
-      console.error(" Transaction fetch error:", err);
-      setError("Failed to load transactions");
+      console.error("❌ Transaction fetch error:", err);
+
+      // ✅ show real error
+      setError(err?.message || "Failed to load transactions");
 
     } finally {
 
@@ -61,21 +95,40 @@ const Transactions = () => {
     }
   };
 
+  // ==============================
+  // 🔄 INITIAL LOAD
+  // ==============================
   useEffect(() => {
-    fetchTransactions();
+
+    if (user) {
+      fetchTransactions();
+    }
+
   }, [user]);
+
+  // ==============================
+  // 📄 LOAD MORE
+  // ==============================
   const loadMore = () => {
 
     if (!nextPage || loadingMore) return;
 
-    setLoadingMore(true);
     fetchTransactions(nextPage);
+
   };
+
+  // ==============================
+  // 🎨 TYPE STYLE
+  // ==============================
   const getTypeStyle = (type: string) => {
     if (type === "CREDIT") return "text-green-600";
     if (type === "DEBIT") return "text-red-600";
     return "text-[#4e342e]";
   };
+
+  // ==============================
+  // ⏳ LOADING
+  // ==============================
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -85,15 +138,30 @@ const Transactions = () => {
       </div>
     );
   }
+
+  // ==============================
+  // ❌ ERROR
+  // ==============================
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#f3e5d8] gap-4">
         <h2 className="text-lg font-semibold text-red-500">
           {error}
         </h2>
+
+        <button
+          onClick={() => fetchTransactions()}
+          className="px-6 py-2 bg-[#6d4c41] text-white rounded-xl"
+        >
+          Retry
+        </button>
       </div>
     );
   }
+
+  // ==============================
+  // 📭 EMPTY
+  // ==============================
   if (!transactions.length) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -103,13 +171,17 @@ const Transactions = () => {
       </div>
     );
   }
+
+  // ==============================
+  // 🧱 UI
+  // ==============================
   return (
     <div className="min-h-screen bg-[#f3e5d8] py-12 px-6">
 
       <div className="max-w-5xl mx-auto">
 
         <h1 className="text-3xl font-bold text-[#4e342e] mb-10">
-          Transaction History 
+          Transaction History
         </h1>
 
         <div className="space-y-5">
@@ -120,9 +192,11 @@ const Transactions = () => {
               key={t.id}
               className="p-6 transition duration-300 bg-white shadow-md rounded-3xl hover:shadow-lg"
             >
+
               <div className="flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
 
                 <div>
+
                   <p className={`text-lg font-semibold ${getTypeStyle(t.transaction_type)}`}>
                     {t.transaction_type}
                   </p>
@@ -134,15 +208,19 @@ const Transactions = () => {
                   <p className="text-sm text-[#8d6e63] mt-1">
                     {new Date(t.created_at).toLocaleString()}
                   </p>
+
                 </div>
 
                 <div>
+
                   <p className={`text-xl font-bold ${getTypeStyle(t.transaction_type)}`}>
-                    ₹ {t.amount}
+                    ₹ {Number(t.amount) || 0}
                   </p>
+
                 </div>
 
               </div>
+
             </div>
 
           ))}

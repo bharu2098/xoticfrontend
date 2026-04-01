@@ -30,28 +30,52 @@ export default function DeliveryDashboard() {
 
   const intervalRef = useRef<number | null>(null);
 
+  // ==============================
+  // 🔐 AUTH FETCH (FIXED ONLY)
+  // ==============================
   const authFetch = useCallback(async (url: string) => {
 
     if (!isLoaded || !isSignedIn) return null;
 
-    const token = await getToken();
+    let token: string | null = null;
+
+    // ✅ retry for Clerk stability
+    for (let i = 0; i < 3; i++) {
+      try {
+        token = await getToken({ template: "default" });
+        if (token) break;
+      } catch (err) {
+        console.warn("Token retry...");
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
 
     if (!token) {
       console.warn("No token available");
       return null;
     }
 
-    const res = await fetch(url, {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    try {
 
-    return res;
+      const res = await fetch(url, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      return res;
+
+    } catch (err) {
+      console.error(" Auth fetch failed:", err);
+      return null;
+    }
 
   }, [getToken, isLoaded, isSignedIn]);
 
+  // ==============================
+  // 📊 FETCH DASHBOARD
+  // ==============================
   const fetchDashboard = useCallback(async () => {
 
     try {
@@ -91,6 +115,9 @@ export default function DeliveryDashboard() {
 
   }, [authFetch]);
 
+  // ==============================
+  // 🔄 INITIAL LOAD
+  // ==============================
   useEffect(() => {
 
     if (!isLoaded || !isSignedIn) return;
@@ -99,6 +126,9 @@ export default function DeliveryDashboard() {
 
   }, [isLoaded, isSignedIn, fetchDashboard]);
 
+  // ==============================
+  // 🔁 AUTO REFRESH
+  // ==============================
   useEffect(() => {
 
     if (!isLoaded || !isSignedIn) return;
@@ -117,6 +147,9 @@ export default function DeliveryDashboard() {
 
   }, [isLoaded, isSignedIn, fetchDashboard]);
 
+  // ==============================
+  // 🧱 UI STATES
+  // ==============================
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -144,7 +177,6 @@ export default function DeliveryDashboard() {
     <div className="min-h-screen bg-[#f3e5d8] py-10 px-6">
 
       <div className="mx-auto max-w-7xl">
-
 
         <div className="flex flex-col gap-6 mb-10 md:flex-row md:justify-between md:items-center">
 

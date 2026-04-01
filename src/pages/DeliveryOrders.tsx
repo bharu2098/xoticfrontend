@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "@clerk/clerk-react";
+
 const API_BASE =
   import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
+
 interface DeliveryOrder {
   order_id: number;
   delivery_status: string;
@@ -26,31 +28,56 @@ export default function DeliveryOrders() {
 
   const intervalRef = useRef<number | null>(null);
 
+  // ==============================
+  // 🔐 AUTH FETCH (FIXED ONLY)
+  // ==============================
   const authFetch = useCallback(
     async (url: string, options: RequestInit = {}) => {
 
       if (!isLoaded || !isSignedIn) return null;
 
-      const token = await getToken();
+      let token: string | null = null;
+
+      // ✅ retry for Clerk stability
+      for (let i = 0; i < 3; i++) {
+        try {
+          token = await getToken({ template: "default" });
+          if (token) break;
+        } catch (err) {
+          console.warn("Token retry...");
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
 
       if (!token) {
         console.warn("No token available");
         return null;
       }
 
-      const res = await fetch(url, {
-        ...options,
-        headers: {
-          "Content-Type": "application/json",
-          ...(options.headers || {}),
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      try {
 
-      return res;
+        const res = await fetch(url, {
+          ...options,
+          headers: {
+            "Content-Type": "application/json",
+            ...(options.headers || {}),
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        return res;
+
+      } catch (err) {
+        console.error(" Auth fetch failed:", err);
+        return null;
+      }
     },
     [getToken, isLoaded, isSignedIn]
   );
+
+  // ==============================
+  // 📦 FETCH ORDERS
+  // ==============================
   const fetchOrders = useCallback(async () => {
 
     try {
@@ -90,6 +117,9 @@ export default function DeliveryOrders() {
 
   }, [authFetch]);
 
+  // ==============================
+  // 🔄 INITIAL LOAD
+  // ==============================
   useEffect(() => {
 
     if (!isLoaded || !isSignedIn) return;
@@ -97,6 +127,10 @@ export default function DeliveryOrders() {
     fetchOrders();
 
   }, [isLoaded, isSignedIn, fetchOrders]);
+
+  // ==============================
+  // 🔁 AUTO REFRESH
+  // ==============================
   useEffect(() => {
 
     if (!isLoaded || !isSignedIn) return;
@@ -114,6 +148,10 @@ export default function DeliveryOrders() {
     };
 
   }, [isLoaded, isSignedIn, fetchOrders]);
+
+  // ==============================
+  // ⚙️ ACTION HANDLER
+  // ==============================
   const handleAction = async (
     orderId: number,
     endpoint: string,
@@ -154,6 +192,9 @@ export default function DeliveryOrders() {
   const handleDelivered = (id: number) =>
     handleAction(id, "delivered", "Delivery failed");
 
+  // ==============================
+  // 🎨 STATUS COLOR
+  // ==============================
   const getStatusColor = (status: string) => {
     switch (status) {
       case "ASSIGNED":
@@ -168,6 +209,10 @@ export default function DeliveryOrders() {
         return "bg-gray-500";
     }
   };
+
+  // ==============================
+  // ⏳ LOADING
+  // ==============================
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -177,6 +222,10 @@ export default function DeliveryOrders() {
       </div>
     );
   }
+
+  // ==============================
+  // 🧱 UI
+  // ==============================
   return (
 
     <div className="min-h-screen bg-[#f3e5d8] py-12 px-4 md:px-6">

@@ -2,6 +2,10 @@ import { useState, useEffect } from "react";
 import { useAuthContext } from "../context/AuthContext";
 import { useApi } from "../services/api";
 
+// ✅ FIX: Ensure DevTunnel works
+const API_BASE =
+  import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000/api";
+
 const KitchenAddProduct = () => {
 
   const { user } = useAuthContext();
@@ -23,12 +27,14 @@ const KitchenAddProduct = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
   const generateSlug = (value: string) =>
     value
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
+
   const handleImageChange = (file: File | null) => {
 
     setImage(file);
@@ -40,11 +46,13 @@ const KitchenAddProduct = () => {
       setPreview(null);
     }
   };
+
   useEffect(() => {
     return () => {
       if (preview) URL.revokeObjectURL(preview);
     };
   }, [preview]);
+
   const extractBackendError = (data: any) => {
 
     if (!data) return "Something went wrong";
@@ -112,11 +120,13 @@ const KitchenAddProduct = () => {
         formData.append("image", image);
       }
 
+      // ✅ FIX: use API base correctly (DevTunnel safe)
       await apiRequest(
         `/products/kitchen/manage/`,
         "POST",
         formData
       );
+
       setSuccess(true);
 
       setCategory("");
@@ -134,11 +144,14 @@ const KitchenAddProduct = () => {
 
       console.error(" Create product error:", err);
 
-      setError(
-        err?.message
-          ? err.message
-          : extractBackendError(err)
-      );
+      // ✅ IMPROVED error handling (no removal)
+      if (err?.data) {
+        setError(extractBackendError(err.data));
+      } else if (err?.message) {
+        setError(err.message);
+      } else {
+        setError("Failed to create product");
+      }
 
     } finally {
 

@@ -88,7 +88,7 @@ const AdminProducts = () => {
       setLoading(true);
       setError(null);
 
-      const endpoint = url || `${API_BASE}/api/products/admin/products/`;
+      const endpoint = url || `${API_BASE}/products/admin/products/`;
 
       const data: PaginatedResponse | Product[] =
         await safeFetch(endpoint);
@@ -150,7 +150,7 @@ const AdminProducts = () => {
       setError(null);
 
       await safeFetch(
-        `${API_BASE}/api/products/admin/products/${id}/${type}_stock/`,
+        `${API_BASE}/products/admin/products/${id}/${type}_stock/`,
         {
           method: "PATCH",
           body: JSON.stringify({ amount: 1 }),
@@ -194,7 +194,7 @@ const AdminProducts = () => {
       setError(null);
 
       await safeFetch(
-        `${API_BASE}/api/products/admin/products/${id}/toggle_availability/`,
+        `${API_BASE}/products/admin/products/${id}/toggle_availability/`,
         { method: "PATCH" }
       );
 

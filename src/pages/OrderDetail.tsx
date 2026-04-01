@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { useAuthContext } from "../context/AuthContext";
 import { useApi } from "../services/api";
+
 interface OrderItem {
   id: number;
   product_name: string;
@@ -28,6 +29,7 @@ interface OrderDetailType {
   items: OrderItem[];
   address?: Address;
 }
+
 export default function OrderDetail() {
 
   const { id } = useParams<{ id: string }>();
@@ -53,6 +55,10 @@ export default function OrderDetail() {
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+
+  // ==============================
+  // 📦 LOAD ORDER (SAFE)
+  // ==============================
   const loadOrder = async () => {
     if (!id || !user) return;
 
@@ -60,7 +66,12 @@ export default function OrderDetail() {
       setLoading(true);
 
       const data = await apiRequest<OrderDetailType>(`/orders/${id}/`);
-      setOrder(data || null);
+
+      if (!data || typeof data !== "object") {
+        throw new Error("Invalid response");
+      }
+
+      setOrder(data);
 
     } catch (err) {
       console.error(" Order fetch error:", err);
@@ -71,8 +82,12 @@ export default function OrderDetail() {
   };
 
   useEffect(() => {
-    if (user) loadOrder();
+    if (user && id) loadOrder();
   }, [id, user]);
+
+  // ==============================
+  // ❌ CANCEL ORDER
+  // ==============================
   const cancelOrder = async () => {
     if (!window.confirm("Cancel this order?")) return;
 
@@ -85,6 +100,10 @@ export default function OrderDetail() {
       alert("Cancel failed");
     }
   };
+
+  // ==============================
+  // 🎥 CAMERA START
+  // ==============================
   const startCamera = async () => {
     if (streamRef.current) return;
 
@@ -102,15 +121,25 @@ export default function OrderDetail() {
       }
     } catch (err) {
       console.error("Camera error:", err);
-      alert("Camera permission denied");
+      alert("Camera permission denied or unsupported");
     }
   };
 
+  // ==============================
+  // 🛑 CAMERA STOP
+  // ==============================
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
   };
 
+  // ==============================
+  // 🔁 MODAL EFFECT
+  // ==============================
   useEffect(() => {
     if (showRefundModal) {
       setPreviewUrl(null);
@@ -123,9 +152,13 @@ export default function OrderDetail() {
 
     return () => stopCamera();
   }, [showRefundModal]);
+
+  // ==============================
+  // 📸 CAPTURE PHOTO
+  // ==============================
   const capturePhoto = () => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || video.videoWidth === 0) return;
 
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
@@ -142,39 +175,63 @@ export default function OrderDetail() {
       const file = new File([blob], "refund.jpg", { type: "image/jpeg" });
 
       setRefundFile(file);
-      setPreviewUrl(URL.createObjectURL(blob));
+
+      const url = URL.createObjectURL(blob);
+      setPreviewUrl(url);
       setPreviewType("image");
     });
   };
+
+  // ==============================
+  // 🎥 RECORD VIDEO
+  // ==============================
   const startRecording = () => {
     if (!streamRef.current || isRecording) return;
 
     chunksRef.current = [];
 
-    const recorder = new MediaRecorder(streamRef.current);
-    recorderRef.current = recorder;
+    try {
+      const recorder = new MediaRecorder(streamRef.current);
+      recorderRef.current = recorder;
 
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
-    };
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
 
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: "video/webm" });
-      const file = new File([blob], "refund.webm");
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "video/webm" });
 
-      setRefundFile(file);
-      setPreviewUrl(URL.createObjectURL(blob));
-      setPreviewType("video");
-      setIsRecording(false);
-    };
+        const file = new File([blob], "refund.webm");
 
-    recorder.start();
-    setIsRecording(true);
+        setRefundFile(file);
+
+        const url = URL.createObjectURL(blob);
+        setPreviewUrl(url);
+        setPreviewType("video");
+
+        setIsRecording(false);
+      };
+
+      recorder.start();
+      setIsRecording(true);
+
+    } catch (err) {
+      console.error("Recording error:", err);
+      alert("Recording not supported");
+    }
   };
 
   const stopRecording = () => {
-    recorderRef.current?.stop();
+    try {
+      recorderRef.current?.stop();
+    } catch (err) {
+      console.error("Stop recording error:", err);
+    }
   };
+
+  // ==============================
+  // 💸 REFUND
+  // ==============================
   const requestRefund = async () => {
 
     if (!refundReason) {
@@ -205,29 +262,39 @@ export default function OrderDetail() {
       setSubmittingRefund(false);
     }
   };
+
+  // ==============================
+  // ⏳ UI STATES
+  // ==============================
   if (loading) return <div className="p-10 text-center">Loading...</div>;
   if (error) return <div className="p-10 text-red-600">{error}</div>;
   if (!order) return <div className="p-10">Order not found</div>;
+
   return (
     <div className="min-h-screen bg-[#f3e5d8] py-10 px-6">
 
       <div className="max-w-5xl mx-auto space-y-6">
+
         <div className="p-6 bg-white shadow rounded-2xl">
           <h1 className="text-2xl font-bold">Order #{order.id}</h1>
           <p>{new Date(order.created_at).toLocaleString()}</p>
+<div className="flex items-center gap-3 mt-2">
+  <span className="px-4 py-2 text-sm font-semibold bg-[#6d4c41] text-white rounded-lg">
+    {order.status}
+  </span>
 
-          <span className="px-3 py-1 bg-[#6d4c41] text-white rounded">
-            {order.status}
-          </span>
-          {order.status === "PENDING" && (
-            <button
-              onClick={cancelOrder}
-              className="px-5 py-2 mt-4 text-white bg-red-600 rounded"
-            >
-              Cancel Order
-            </button>
-          )}
+  {order.status === "PENDING" && (
+    <button
+      onClick={cancelOrder}
+      className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg"
+    >
+      Cancel Order
+    </button>
+  )}
+</div>
+          
         </div>
+
         {order.address && (
           <div className="p-6 bg-white shadow rounded-2xl">
             <h2 className="mb-2 font-bold">Address</h2>
@@ -236,6 +303,7 @@ export default function OrderDetail() {
             <p>{order.address.city}</p>
           </div>
         )}
+
         <div className="p-6 bg-white shadow rounded-2xl">
           <h2 className="mb-2 font-bold">Items</h2>
           {order.items.map((item) => (
@@ -245,14 +313,16 @@ export default function OrderDetail() {
             </div>
           ))}
         </div>
+
         {(order.status === "COMPLETED" || order.status === "DELIVERED") && (
-          <button
-            onClick={() => setShowRefundModal(true)}
-            className="px-5 py-3 text-white bg-orange-600 rounded-xl"
-          >
-            Request Refund
-          </button>
+         <button
+  onClick={() => setShowRefundModal(true)}
+  className="px-4 py-2 text-sm font-semibold text-white bg-orange-600 rounded-lg"
+>
+  Request Refund
+</button>
         )}
+
         {showRefundModal && (
           <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/50">
 

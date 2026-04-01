@@ -1,19 +1,42 @@
+import { useAuth } from "@clerk/clerk-react";
+
 const API_BASE =
   import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000/api";
+
+// ✅ NEW: helper to get token outside component
+let getTokenFn: (() => Promise<string | null>) | null = null;
+
+export const setTokenGetter = (fn: () => Promise<string | null>) => {
+  getTokenFn = fn;
+};
+
 const apiRequest = async <T>(
   endpoint: string,
   method: string = "GET",
   body?: any
 ): Promise<T> => {
   try {
-    const token = localStorage.getItem("access");
+    // ✅ FIXED: Clerk token instead of localStorage
+    let token: string | null = null;
+
+    if (getTokenFn) {
+      try {
+        token = await getTokenFn();
+      } catch (err) {
+        console.error("Token fetch failed:", err);
+      }
+    }
+
     const headers: Record<string, string> = {};
+
     if (!(body instanceof FormData)) {
       headers["Content-Type"] = "application/json";
     }
 
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
+    } else {
+      console.warn("⚠️ No token found");
     }
 
     const res = await fetch(`${API_BASE}${endpoint}`, {
@@ -25,6 +48,7 @@ const apiRequest = async <T>(
           : JSON.stringify(body)
         : undefined,
     });
+
     const text = await res.text();
 
     let data: any = null;
@@ -34,6 +58,7 @@ const apiRequest = async <T>(
     } catch {
       data = { message: text };
     }
+
     if (!res.ok) {
       if (res.status === 401) {
         console.error(" Unauthorized");
@@ -49,11 +74,12 @@ const apiRequest = async <T>(
 
       throw new Error(
         data?.error ||
-        data?.detail ||
-        data?.message ||
-        `API Error (${res.status})`
+          data?.detail ||
+          data?.message ||
+          `API Error (${res.status})`
       );
     }
+
     if (res.status === 204) {
       return {} as T;
     }
@@ -66,6 +92,10 @@ const apiRequest = async <T>(
     throw new Error(err.message || "Network error");
   }
 };
+
+// ==============================
+// TYPES (UNCHANGED)
+// ==============================
 export interface Product {
   id: number;
   name: string;
@@ -89,6 +119,10 @@ export interface PaginatedResponse<T> {
   previous: string | null;
   results: T[];
 }
+
+// ==============================
+// API FUNCTIONS (UNCHANGED)
+// ==============================
 export const getProducts = async (
   query: string = ""
 ): Promise<PaginatedResponse<Product>> => {
@@ -97,6 +131,7 @@ export const getProducts = async (
       `/products/${query ? `?${query}` : ""}`,
       "GET"
     );
+
     if (Array.isArray(data)) {
       return {
         count: data.length,
@@ -119,6 +154,7 @@ export const getProducts = async (
     };
   }
 };
+
 export const getProductDetail = async (
   id: number
 ): Promise<Product | null> => {
@@ -132,6 +168,7 @@ export const getProductDetail = async (
     return null;
   }
 };
+
 export const createProduct = async (
   payload: Partial<Product>
 ): Promise<Product | null> => {
@@ -146,6 +183,7 @@ export const createProduct = async (
     return null;
   }
 };
+
 export const updateProduct = async (
   id: number,
   payload: Partial<Product>
@@ -161,6 +199,7 @@ export const updateProduct = async (
     return null;
   }
 };
+
 export const deleteProduct = async (
   id: number
 ): Promise<boolean> => {

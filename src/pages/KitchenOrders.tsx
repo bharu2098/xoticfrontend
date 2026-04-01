@@ -21,7 +21,6 @@ const KitchenOrders = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 🔥 NEW STATES
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
@@ -29,6 +28,9 @@ const KitchenOrders = () => {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<number | null>(null);
 
+  // ==============================
+  // 📦 LOAD ORDERS
+  // ==============================
   const loadOrders = useCallback(async () => {
     if (!isSignedIn) return;
 
@@ -61,7 +63,9 @@ const KitchenOrders = () => {
     loadOrders();
   }, [isLoaded, isSignedIn, loadOrders]);
 
-  // 🔥 WEBSOCKET (UNCHANGED)
+  // ==============================
+  // 🔌 WEBSOCKET (FIXED ONLY)
+  // ==============================
   const connectSocket = useCallback(async () => {
     if (!isLoaded || !isSignedIn) return;
 
@@ -69,8 +73,22 @@ const KitchenOrders = () => {
       if (socketRef.current) socketRef.current.close();
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
 
-      const token = await getToken();
-      if (!token) return;
+      let token: string | null = null;
+
+      // ✅ retry for Clerk stability
+      for (let i = 0; i < 3; i++) {
+        try {
+          token = await getToken({ template: "default" });
+          if (token) break;
+        } catch {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
+
+      if (!token) {
+        console.warn("No WS token available");
+        return;
+      }
 
       const socket = new WebSocket(
         `${API_WS}/ws/kitchen/?token=${token}`
@@ -79,12 +97,18 @@ const KitchenOrders = () => {
       socketRef.current = socket;
 
       socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (
-          data.type === "kitchen_notification" ||
-          data.type === "order_status"
-        ) {
-          loadOrders();
+        try {
+          const data = JSON.parse(event.data);
+
+          if (
+            data.type === "kitchen_notification" ||
+            data.type === "order_status"
+          ) {
+            loadOrders();
+          }
+
+        } catch (err) {
+          console.error("WS parse error:", err);
         }
       };
 
@@ -95,7 +119,7 @@ const KitchenOrders = () => {
       };
 
     } catch (err) {
-      console.error(err);
+      console.error("WebSocket error:", err);
     }
 
   }, [getToken, loadOrders, isLoaded, isSignedIn]);
@@ -112,7 +136,9 @@ const KitchenOrders = () => {
 
   }, [connectSocket, isLoaded, isSignedIn]);
 
+  // ==============================
   // 🔍 FILTER
+  // ==============================
   const filteredOrders = useMemo(() => {
     return orders.filter((o: any) => {
       const text = search.toLowerCase();
@@ -123,7 +149,9 @@ const KitchenOrders = () => {
     });
   }, [orders, search]);
 
+  // ==============================
   // 📄 PAGINATION
+  // ==============================
   const totalPages = Math.max(
     1,
     Math.ceil(filteredOrders.length / itemsPerPage)
@@ -165,7 +193,6 @@ const KitchenOrders = () => {
 
         </div>
 
-        {/* 🔥 SEARCH */}
         <input
           type="text"
           placeholder="Search Order ID / User"
@@ -209,7 +236,6 @@ const KitchenOrders = () => {
               ))}
             </div>
 
-            {/* 🔥 PAGINATION */}
             <div className="flex items-center justify-center gap-2 mt-6">
               <button
                 disabled={currentPage === 1}
@@ -247,6 +273,7 @@ const KitchenOrders = () => {
       </div>
 
     </div>
+
   );
 };
 

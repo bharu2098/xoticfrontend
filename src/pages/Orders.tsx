@@ -36,8 +36,8 @@ const Orders = () => {
       CONFIRMED: "bg-blue-500",
       PREPARING: "bg-orange-500",
       READY: "bg-gray-500",
-      COMPLETED: "bg-green-600", 
-      OUT_FOR_DELIVERY: "bg-purple-600", 
+      COMPLETED: "bg-green-600",
+      OUT_FOR_DELIVERY: "bg-purple-600",
       DELIVERED: "bg-green-600",
       CANCELLED: "bg-red-600",
       REFUND_REQUESTED: "bg-orange-600",
@@ -55,6 +55,10 @@ const Orders = () => {
       </span>
     );
   };
+
+  // ==============================
+  // 📦 FETCH ORDERS (SAFE)
+  // ==============================
   const fetchOrders = async (url?: string) => {
 
     if (!user) return;
@@ -64,16 +68,29 @@ const Orders = () => {
       url ? setLoadingMore(true) : setLoading(true);
       setError(null);
 
-      const endpoint = url
-        ? url.replace("http://127.0.0.1:8000/api", "")
-        : `/orders/history/`;
+      let endpoint = `/orders/history/`;
+
+      if (url) {
+        try {
+          const parsed = new URL(url);
+          endpoint = parsed.pathname.replace("/api", "") + parsed.search;
+        } catch {
+          endpoint = url;
+        }
+      }
 
       const data: PaginatedResponse = await apiRequest(endpoint);
 
+      if (!data || typeof data !== "object") {
+        throw new Error("Invalid response");
+      }
+
+      const newOrders = Array.isArray(data.results) ? data.results : [];
+
       setOrders((prev) =>
         url
-          ? [...prev, ...(data.results || [])]
-          : (data.results || [])
+          ? [...prev, ...newOrders]
+          : newOrders
       );
 
       setNextPage(data.next || null);
@@ -92,11 +109,18 @@ const Orders = () => {
     }
   };
 
+  // ==============================
+  // 🔄 INITIAL LOAD
+  // ==============================
   useEffect(() => {
-    if (user !== undefined) {
+    if (user) {
       fetchOrders();
     }
   }, [user]);
+
+  // ==============================
+  // ⏳ LOADING
+  // ==============================
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -107,6 +131,9 @@ const Orders = () => {
     );
   }
 
+  // ==============================
+  // ❌ ERROR
+  // ==============================
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -117,6 +144,9 @@ const Orders = () => {
     );
   }
 
+  // ==============================
+  // 📭 EMPTY
+  // ==============================
   if (!orders.length) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -126,6 +156,10 @@ const Orders = () => {
       </div>
     );
   }
+
+  // ==============================
+  // 🧱 UI
+  // ==============================
   return (
     <div className="min-h-screen bg-[#f3e5d8] py-12 px-6">
 

@@ -18,18 +18,38 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ==============================
+  // 📦 LOAD PRODUCT (SAFE)
+  // ==============================
   useEffect(() => {
+
+    let isMounted = true;
 
     const loadProduct = async () => {
 
-      if (!id) return;
+      if (!id) {
+        setError("Invalid product ID");
+        setLoading(false);
+        return;
+      }
+
+      const numericId = Number(id);
+
+      if (isNaN(numericId)) {
+        setError("Invalid product ID");
+        setLoading(false);
+        return;
+      }
 
       try {
 
         setLoading(true);
         setError(null);
 
-        const data = await getProductDetail(Number(id));
+        const data = await getProductDetail(numericId);
+
+        if (!isMounted) return;
 
         if (!data) {
           setError("Product not found");
@@ -42,18 +62,31 @@ export default function ProductDetail() {
       } catch (err) {
 
         console.error(" Product fetch error:", err);
-        setError("Failed to load product");
+
+        if (isMounted) {
+          setError("Failed to load product");
+        }
 
       } finally {
 
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
 
       }
     };
 
     loadProduct();
 
+    return () => {
+      isMounted = false;
+    };
+
   }, [id]);
+
+  // ==============================
+  // ⏳ LOADING
+  // ==============================
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -64,6 +97,9 @@ export default function ProductDetail() {
     );
   }
 
+  // ==============================
+  // ❌ ERROR
+  // ==============================
   if (error || !product) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#f3e5d8] gap-4">
@@ -80,9 +116,17 @@ export default function ProductDetail() {
       </div>
     );
   }
-  const price = Number(product.price) || 0;
-  const totalPrice = price * quantity;
 
+  // ==============================
+  // 💰 PRICE SAFE
+  // ==============================
+  const price = Number(product.price) || 0;
+  const safeQuantity = Math.max(1, Math.min(99, quantity));
+  const totalPrice = price * safeQuantity;
+
+  // ==============================
+  // 🛒 ADD TO CART
+  // ==============================
   const addToCart = async () => {
 
     if (!user) {
@@ -90,7 +134,7 @@ export default function ProductDetail() {
       return;
     }
 
-    if (quantity <= 0) {
+    if (safeQuantity <= 0) {
       alert("Invalid quantity");
       return;
     }
@@ -101,7 +145,7 @@ export default function ProductDetail() {
 
       await apiRequest(`/cart/items/`, "POST", {
         product_id: product.id,
-        quantity,
+        quantity: safeQuantity,
       });
 
       alert("Item added to cart");
@@ -118,11 +162,13 @@ export default function ProductDetail() {
 
     }
   };
+
   return (
 
     <div className="min-h-screen bg-[#f3e5d8] py-12 px-6">
 
       <div className="max-w-6xl mx-auto">
+
         <button
           onClick={() => navigate(-1)}
           className="mb-6 text-sm font-semibold text-[#6d4c41] hover:underline"
@@ -131,13 +177,14 @@ export default function ProductDetail() {
         </button>
 
         <div className="grid gap-10 p-8 bg-white shadow-xl rounded-3xl md:grid-cols-2">
+
           <div className="flex items-center justify-center">
 
             {product.image ? (
               <img
                 src={product.image}
                 alt={product.name}
-                loading="lazy" 
+                loading="lazy"
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).src =
                     "https://via.placeholder.com/400x300?text=No+Image";
@@ -151,6 +198,7 @@ export default function ProductDetail() {
             )}
 
           </div>
+
           <div className="flex flex-col justify-between">
 
             <div>
@@ -166,11 +214,13 @@ export default function ProductDetail() {
               <p className="mt-6 text-[#5d4037]">
                 {product.description || "No description available"}
               </p>
+
               <div className="flex items-center gap-4 mt-8">
                 <span className="text-3xl font-bold">
                   ₹ {price}
                 </span>
               </div>
+
               <div className="flex items-center gap-6 mt-8">
 
                 <span className="font-semibold">Quantity:</span>
@@ -187,7 +237,7 @@ export default function ProductDetail() {
                   </button>
 
                   <span className="px-6 py-2 font-semibold">
-                    {quantity}
+                    {safeQuantity}
                   </span>
 
                   <button
@@ -202,14 +252,16 @@ export default function ProductDetail() {
                 </div>
 
               </div>
+
               <div className="mt-6 text-lg font-bold">
                 Total: ₹ {totalPrice}
               </div>
 
             </div>
+
             <button
               onClick={addToCart}
-              disabled={adding || quantity <= 0}
+              disabled={adding || safeQuantity <= 0}
               className={`mt-10 py-4 w-full text-white rounded-2xl ${
                 adding
                   ? "bg-gray-400"
@@ -218,7 +270,7 @@ export default function ProductDetail() {
             >
               {adding
                 ? "Adding..."
-                : `Add ${quantity} to Cart • ₹ ${totalPrice}`}
+                : `Add ${safeQuantity} to Cart • ₹ ${totalPrice}`}
             </button>
 
           </div>

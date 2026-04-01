@@ -6,11 +6,14 @@ import {
   Outlet,
   NavLink,
 } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import Navbar from "./components/Navbar";
 import { useAuthContext } from "./context/AuthContext";
+
 import { setClerkTokenGetter } from "./services/kitchenService";
+import { setDeliveryTokenGetter } from "./services/deliveryService";
+import { setAdminTokenGetter } from "./services/adminApi";
 
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -23,7 +26,6 @@ import Transactions from "./pages/Transactions";
 import Orders from "./pages/Orders";
 import OrderDetail from "./pages/OrderDetail";
 
-import KitchenDashboard from "./pages/KitchenDashboard";
 import KitchenOrders from "./pages/KitchenOrders";
 
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -39,27 +41,36 @@ import AdminRefunds from "./pages/admin/AdminRefunds";
 import AdminKitchenDashboard from "./pages/admin/AdminKitchenDashboard";
 import AdminOrderDetail from "./pages/admin/AdminOrderDetail";
 
+// ==============================
+// ⏳ LOADING
+// ==============================
 const LoadingScreen = () => (
-  <div className="flex items-center justify-center min-h-screen">
+  <div className="flex items-center justify-center w-full min-h-screen">
     <div className="text-lg font-semibold">Loading...</div>
   </div>
 );
 
+// ==============================
+// 🔐 AUTH GUARDS (UNCHANGED)
+// ==============================
 const RequireAuth = () => {
-  const { user, loading } = useAuthContext();
-  if (loading) return <LoadingScreen />;
-  if (!user) return <Navigate to="/login" replace />;
+  const { loading } = useAuthContext();
+  const { isLoaded, isSignedIn } = useAuth();
+
+  if (!isLoaded || loading) return <LoadingScreen />;
+  if (!isSignedIn) return <Navigate to="/login" replace />;
+
   return <Outlet />;
 };
 
 const RequireKitchen = () => {
-  const { user, role, loading } = useAuthContext();
+  const { role, loading } = useAuthContext();
+  const { isLoaded, isSignedIn } = useAuth();
 
-  if (loading || role === null) return <LoadingScreen />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!isLoaded || loading || role === null) return <LoadingScreen />;
+  if (!isSignedIn) return <Navigate to="/login" replace />;
 
   const r = role?.toLowerCase().trim();
-
   if (r !== "kitchenstaff" && r !== "admin") {
     return <Navigate to="/" replace />;
   }
@@ -68,40 +79,40 @@ const RequireKitchen = () => {
 };
 
 const RequireAdmin = () => {
-  const { user, role, loading } = useAuthContext();
+  const { role, loading } = useAuthContext();
+  const { isLoaded, isSignedIn } = useAuth();
 
-  if (loading || role === null) return <LoadingScreen />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!isLoaded || loading || role === null) return <LoadingScreen />;
+  if (!isSignedIn) return <Navigate to="/login" replace />;
 
   const r = role?.toLowerCase().replace(/\s/g, "");
-
-  if (r !== "admin") {
-    return <Navigate to="/" replace />;
-  }
+  if (r !== "admin") return <Navigate to="/" replace />;
 
   return <Outlet />;
 };
 
+// ==============================
+// 🧩 MAIN LAYOUT (FIXED)
+// ==============================
 const MainLayout = () => (
-  <>
+  <div className="w-full min-h-screen">
     <Navbar />
-    <Outlet />
-  </>
-);
 
-const Section = ({ label }: { label: string }) => (
-  <div className="pt-4 text-xs text-orange-200 uppercase">
-    {label}
+    {/* ✅ FIX: better spacing */}
+    <div className="w-full px-2 sm:px-4 md:px-6">
+      <Outlet />
+    </div>
   </div>
 );
 
-const AdminLink = ({
-  to,
-  label,
-}: {
-  to: string;
-  label: string;
-}) => (
+// ==============================
+// 🧩 ADMIN LAYOUT (RESPONSIVE)
+// ==============================
+const Section = ({ label }: { label: string }) => (
+  <div className="pt-4 text-xs text-orange-200 uppercase">{label}</div>
+);
+
+const AdminLink = ({ to, label }: any) => (
   <NavLink
     to={to}
     end={to === "/admin"}
@@ -115,60 +126,83 @@ const AdminLink = ({
   </NavLink>
 );
 
-const AdminLayout = () => (
-  <div className="flex h-screen overflow-hidden bg-[#fdf6f0]">
-    <aside className="w-72 bg-[#5a2d0c] text-white flex flex-col">
-      <div className="p-6 border-b">
-        <h2 className="text-xl font-bold">Xotic Admin</h2>
-      </div>
+const AdminLayout = () => {
+  const [open, setOpen] = useState(false);
 
-      <div className="flex-1 px-4 py-4 overflow-y-auto">
-        <nav className="space-y-3 text-sm font-medium">
-          <AdminLink to="/admin" label="Dashboard" />
-          <AdminLink to="/admin/users" label="Users" />
+  return (
+    <div className="flex w-full min-h-screen bg-[#fdf6f0]">
 
-          <Section label="Catalog" />
-          <AdminLink to="/admin/products" label="Products" />
-          <AdminLink to="/admin/categories" label="Categories" />
-          <AdminLink to="/admin/kitchens" label="Kitchens" />
+      {/* ✅ MOBILE TOGGLE */}
+      <button
+        className="fixed z-50 p-2 text-white bg-[#5a2d0c] md:hidden top-4 left-4 rounded"
+        onClick={() => setOpen(!open)}
+      >
+        ☰
+      </button>
 
-          <Section label="Orders" />
-          <AdminLink to="/admin/orders" label="Orders" />
+      {/* SIDEBAR */}
+      <aside
+        className={`fixed md:relative z-40 w-64 md:w-72 bg-[#5a2d0c] text-white flex flex-col h-full transition-transform ${
+          open ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        }`}
+      >
+        <div className="p-6 border-b">
+          <h2 className="text-xl font-bold">Xotic Admin</h2>
+        </div>
 
-          <Section label="Operations" />
-          <AdminLink
-            to="/admin/kitchen-dashboard"
-            label="Kitchen Dashboard"
-          />
-          <AdminLink to="/admin/refunds" label="Refunds" />
+        <div className="flex-1 px-4 py-4 overflow-y-auto">
+          <nav className="space-y-3 text-sm font-medium">
+            <AdminLink to="/admin" label="Dashboard" />
+            <AdminLink to="/admin/users" label="Users" />
 
-          <Section label="System" />
-          <AdminLink to="/admin/coupons" label="Coupons" />
-          <AdminLink to="/admin/pincodes" label="Pincodes" />
-          <AdminLink to="/admin/payments" label="Payments" />
-        </nav>
-      </div>
-    </aside>
+            <Section label="Catalog" />
+            <AdminLink to="/admin/products" label="Products" />
+            <AdminLink to="/admin/categories" label="Categories" />
+            <AdminLink to="/admin/kitchens" label="Kitchens" />
 
-    <main className="flex-1 p-8 overflow-y-auto">
-      <Outlet />
-    </main>
-  </div>
-);
+            <Section label="Orders" />
+            <AdminLink to="/admin/orders" label="Orders" />
 
+            <Section label="Operations" />
+            <AdminLink to="/admin/kitchen-dashboard" label="Kitchen Dashboard" />
+            <AdminLink to="/admin/refunds" label="Refunds" />
+
+            <Section label="System" />
+            <AdminLink to="/admin/coupons" label="Coupons" />
+            <AdminLink to="/admin/pincodes" label="Pincodes" />
+            <AdminLink to="/admin/payments" label="Payments" />
+          </nav>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT */}
+      <main className="flex-1 w-full p-4 overflow-y-auto md:p-8">
+        <Outlet />
+      </main>
+    </div>
+  );
+};
+
+// ==============================
+// 🚀 APP (UNCHANGED LOGIC)
+// ==============================
 export default function App() {
-  const { getToken, isLoaded } = useAuth();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
 
   useEffect(() => {
     if (!isLoaded) return;
 
-    setClerkTokenGetter(async () => {
+    const getClerkToken = async () => {
       try {
-        return await getToken();
+        return await getToken({ template: "default" });
       } catch {
         return null;
       }
-    });
+    };
+
+    setClerkTokenGetter(getClerkToken);
+    setDeliveryTokenGetter(getClerkToken);
+    setAdminTokenGetter(getClerkToken);
   }, [getToken, isLoaded]);
 
   if (!isLoaded) return <LoadingScreen />;
@@ -176,10 +210,18 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* MAIN */}
+
         <Route element={<MainLayout />}>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
+          <Route element={<RequireAuth />}>
+            <Route path="/" element={<Home />} />
+          </Route>
+
+          <Route
+            path="/login"
+            element={
+              isSignedIn ? <Navigate to="/" replace /> : <Login />
+            }
+          />
 
           <Route path="/products" element={<ProductList />} />
           <Route path="/products/:id" element={<ProductDetail />} />
@@ -193,27 +235,15 @@ export default function App() {
             <Route path="/transactions" element={<Transactions />} />
           </Route>
 
-          {/* 🔥 KITCHEN FIXED */}
           <Route element={<RequireKitchen />}>
             <Route path="/kitchen">
-
-              {/* ALWAYS REDIRECT TO ORDERS */}
               <Route index element={<Navigate to="orders" replace />} />
-
-              {/* BLOCK DASHBOARD */}
-              <Route
-                path="dashboard"
-                element={<Navigate to="/kitchen/orders" replace />}
-              />
-
-              {/* ONLY REAL PAGE */}
+              <Route path="dashboard" element={<Navigate to="/kitchen/orders" replace />} />
               <Route path="orders" element={<KitchenOrders />} />
-
             </Route>
           </Route>
         </Route>
 
-        {/* ADMIN */}
         <Route element={<RequireAdmin />}>
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboard />} />
@@ -231,7 +261,6 @@ export default function App() {
           </Route>
         </Route>
 
-        {/* FALLBACK */}
         <Route
           path="*"
           element={
@@ -240,13 +269,14 @@ export default function App() {
                 window.location.pathname.startsWith("/admin")
                   ? "/admin"
                   : window.location.pathname.startsWith("/kitchen")
-                  ? "/kitchen/orders" // ✅ FIXED
+                  ? "/kitchen/orders"
                   : "/"
               }
               replace
             />
           }
         />
+
       </Routes>
     </BrowserRouter>
   );

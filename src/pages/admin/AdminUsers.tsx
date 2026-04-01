@@ -66,7 +66,7 @@ export default function AdminUsers() {
       setLoading(true);
       setError(null);
 
-      const url = pageUrl || `${API_BASE}/api/users/admin/users/`;
+      const url = pageUrl || `${API_BASE}/users/admin/users/`;
 
       const res = await authFetch(url);
 
@@ -125,7 +125,7 @@ export default function AdminUsers() {
       setError(null);
 
       const res = await authFetch(
-        `${API_BASE}/api/users/admin/users/${id}/${action}/`,
+        `${API_BASE}/users/admin/users/${id}/${action}/`,
         { method: "PATCH" }
       );
 

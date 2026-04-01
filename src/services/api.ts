@@ -1,11 +1,14 @@
 import { useAuth } from "@clerk/clerk-react";
+
 const API_BASE =
   import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000/api";
+
 export interface ApiError {
   message: string;
   status: number;
   data?: any;
 }
+
 export function useApi() {
   const { getToken, isLoaded, isSignedIn, signOut } = useAuth();
 
@@ -17,6 +20,9 @@ export function useApi() {
     customHeaders: Record<string, string> = {}
   ): Promise<T> => {
     try {
+      // ==============================
+      // 🔐 AUTH CHECK
+      // ==============================
       if (!isLoaded) {
         throw {
           message: "Authentication is still loading",
@@ -30,7 +36,21 @@ export function useApi() {
           status: 401,
         } as ApiError;
       }
-      const token = await getToken({ template: "default" });
+
+      // ==============================
+      // 🔑 TOKEN (WITH RETRY)
+      // ==============================
+      let token: string | null = null;
+
+      for (let i = 0; i < 3; i++) {
+        try {
+          token = await getToken({ template: "default" });
+          if (token) break;
+        } catch (err) {
+          console.warn("Token retry...");
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
 
       if (!token) {
         throw {
@@ -38,35 +58,51 @@ export function useApi() {
           status: 401,
         } as ApiError;
       }
+
+      // ==============================
+      // 📦 HEADERS
+      // ==============================
       const headers: Record<string, string> = {
         Authorization: `Bearer ${token}`,
         ...customHeaders,
       };
+
       if (!(body instanceof FormData)) {
         headers["Content-Type"] = "application/json";
       }
+
       if (useIdempotency) {
         headers["Idempotency-Key"] = crypto.randomUUID();
       }
+
+      // ==============================
+      // 🌐 REQUEST
+      // ==============================
       const options: RequestInit = {
         method,
         headers,
-        signal: AbortSignal.timeout(15000), 
+        signal: AbortSignal.timeout(15000),
       };
 
       if (body) {
         options.body =
           body instanceof FormData ? body : JSON.stringify(body);
       }
+
       const url = `${API_BASE}${
         endpoint.startsWith("/") ? endpoint : `/${endpoint}`
       }`;
 
       const response = await fetch(url, options);
+
+      // ==============================
+      // 🔴 AUTH FAIL
+      // ==============================
       if (response.status === 401) {
-        console.warn(" Session expired");
+        console.warn("Session expired");
 
         await signOut();
+
         if (window.location.pathname !== "/login") {
           window.location.href = "/login";
         }
@@ -76,9 +112,17 @@ export function useApi() {
           status: 401,
         } as ApiError;
       }
+
+      // ==============================
+      // ✅ NO CONTENT
+      // ==============================
       if (response.status === 204) {
         return {} as T;
       }
+
+      // ==============================
+      // 📥 SAFE PARSE
+      // ==============================
       let data: any = null;
 
       try {
@@ -86,18 +130,22 @@ export function useApi() {
       } catch {
         try {
           const text = await response.text();
-          data = { message: text };
+          data = text ? { message: text } : null;
         } catch {
           data = null;
         }
       }
+
+      // ==============================
+      // 🔴 ERROR HANDLING
+      // ==============================
       if (!response.ok) {
         if (response.status >= 500) {
-          console.error(" Server error:", data);
+          console.error("Server error:", data);
         }
 
         if (response.status === 403) {
-          console.warn(" Permission denied");
+          console.warn("Permission denied");
         }
 
         throw {
@@ -110,16 +158,21 @@ export function useApi() {
           data,
         } as ApiError;
       }
+
       return data as T;
 
     } catch (error: any) {
-      console.error(" API Error:", error);
+      console.error("API Error:", error);
+
+      // ⏱ timeout
       if (error.name === "TimeoutError") {
         throw {
           message: "Request timeout. Please try again.",
           status: 408,
         } as ApiError;
       }
+
+      // 🌐 network fail
       if (error instanceof TypeError) {
         throw {
           message: "Network error. Backend may be down.",
@@ -127,6 +180,7 @@ export function useApi() {
         } as ApiError;
       }
 
+      // 🔁 fallback
       throw {
         message: error?.message || "Something went wrong",
         status: error?.status || 500,

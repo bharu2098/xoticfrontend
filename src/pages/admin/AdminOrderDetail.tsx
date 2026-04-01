@@ -82,7 +82,7 @@ export default function AdminOrderDetail() {
       if (!token) throw new Error("No auth token");
 
       const res = await fetch(
-        `${API}/api/orders/admin/orders/${id}/`,
+        `${API}/orders/admin/orders/${id}/`,
         {
           headers: {
             Authorization: `Bearer ${token}`,

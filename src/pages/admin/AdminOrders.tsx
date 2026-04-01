@@ -5,7 +5,7 @@ import { useAuth } from "@clerk/clerk-react";
 const API_ROOT =
   import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 
-const ADMIN_ORDERS_API = `${API_ROOT}/api/orders/admin/orders`;
+const ADMIN_ORDERS_API = `${API_ROOT}/orders/admin/orders`;
 
 interface OrderItem {
   id?: number;
@@ -139,7 +139,7 @@ const token = await getToken();
       setProcessingId(id);
 
       const res = await authFetch(
-        `${API_ROOT}/api/kitchen/orders/${id}/${action}/`,
+        `${API_ROOT}/kitchen/orders/${id}/${action}/`,
         { method: "POST" }
       );
 

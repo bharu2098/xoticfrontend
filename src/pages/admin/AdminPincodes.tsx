@@ -76,7 +76,7 @@ export default function AdminPincodes() {
 
     try {
 
-      const res = await authFetch(`${API_BASE}/api/orders/admin/pincodes/`);
+      const res = await authFetch(`${API_BASE}/orders/admin/pincodes/`);
       if (!res) return;
 
       const data = await res.json();
@@ -116,8 +116,8 @@ export default function AdminPincodes() {
 
       // ✅ UPDATED
       const url = editingId
-        ? `${API_BASE}/api/orders/admin/pincodes/${editingId}/`
-        : `${API_BASE}/api/orders/admin/pincodes/`;
+        ? `${API_BASE}/orders/admin/pincodes/${editingId}/`
+        : `${API_BASE}/orders/admin/pincodes/`;
 
       const method = editingId ? "PUT" : "POST";
 
@@ -162,7 +162,7 @@ export default function AdminPincodes() {
 
     try {
 
-      await authFetch(`${API_BASE}/api/orders/admin/pincodes/${id}/`, {
+      await authFetch(`${API_BASE}/orders/admin/pincodes/${id}/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_active: !currentStatus }),
@@ -282,7 +282,7 @@ export default function AdminPincodes() {
                     onClick={async () => {
                       if (!confirm("Delete this pincode?")) return;
 
-                      await authFetch(`${API_BASE}/api/orders/admin/pincodes/${p.id}/`, {
+                      await authFetch(`${API_BASE}/orders/admin/pincodes/${p.id}/`, {
                         method: "DELETE",
                       });
 

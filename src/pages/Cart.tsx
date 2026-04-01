@@ -61,12 +61,30 @@ export default function Cart() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
 
+  // ==============================
+  // 🔐 AUTH FETCH (FIXED ONLY HERE)
+  // ==============================
   const authFetch = useCallback(async (url: string, options: RequestInit = {}) => {
 
     if (!isLoaded || !isSignedIn) return null;
 
-    const token = await getToken();
-    if (!token) return null;
+    let token: string | null = null;
+
+    // ✅ retry for Clerk stability
+    for (let i = 0; i < 3; i++) {
+      try {
+        token = await getToken({ template: "default" });
+        if (token) break;
+      } catch (err) {
+        console.warn("Token retry...");
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+
+    if (!token) {
+      console.warn("No Clerk token found");
+      return null;
+    }
 
     try {
 
@@ -89,6 +107,9 @@ export default function Cart() {
 
   }, [getToken, isLoaded, isSignedIn]);
 
+  // ==============================
+  // 📦 FETCH CART
+  // ==============================
   const fetchCart = useCallback(async () => {
 
     try {
@@ -131,6 +152,9 @@ export default function Cart() {
 
   }, [authFetch]);
 
+  // ==============================
+  // 📍 FETCH ADDRESSES
+  // ==============================
   const fetchAddresses = useCallback(async () => {
 
     try {
@@ -155,6 +179,9 @@ export default function Cart() {
 
   }, [authFetch]);
 
+  // ==============================
+  // 🎟 APPLY COUPON
+  // ==============================
   const applyCoupon = async () => {
 
     if (!coupon.trim()) {
@@ -207,6 +234,9 @@ export default function Cart() {
 
   };
 
+  // ==============================
+  // ❌ REMOVE ITEM
+  // ==============================
   const removeItem = async (id: number) => {
 
     try {
@@ -231,6 +261,9 @@ export default function Cart() {
 
   };
 
+  // ==============================
+  // 🔄 UPDATE QUANTITY
+  // ==============================
   const updateQuantity = async (id: number, quantity: number) => {
 
     if (quantity < 1) return;
@@ -259,6 +292,9 @@ export default function Cart() {
 
   };
 
+  // ==============================
+  // 💳 CHECKOUT
+  // ==============================
   const handleCheckout = async () => {
 
     if (!selectedAddress) {
@@ -308,7 +344,7 @@ export default function Cart() {
 
           handler: async (response: any) => {
 
-            await authFetch(`${API_BASE}/orders/verify-payment/`, {
+            await authFetch(`${API_BASE}/orders/payment/verify/`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -371,138 +407,157 @@ export default function Cart() {
       </div>
     );
   }
+return (
+  <div className="min-h-screen bg-[#f3e5d8] py-6 px-3 sm:px-6">
+    
+    {/* ✅ FIXED CONTAINER */}
+    <div className="flex flex-col gap-6 mx-auto max-w-7xl md:grid md:grid-cols-3 md:gap-10">
 
-  return (
-    <div className="min-h-screen bg-[#f3e5d8] py-12 px-6">
-      <div className="grid gap-10 mx-auto max-w-7xl md:grid-cols-3">
-        <div className="space-y-6 md:col-span-2">
-          <h1 className="text-3xl font-bold text-[#4e342e]">
-            Your Cart 🛒
-          </h1>
+      {/* ================= LEFT SIDE ================= */}
+      <div className="space-y-4 md:col-span-2">
 
-          {cart.items.length === 0 ? (
-            <div className="p-6 bg-white shadow rounded-xl">
-              Cart is empty
-            </div>
-          ) : (
-            cart.items.map((item) => (
-              <div
-                key={item.id}
-                className="flex justify-between p-6 bg-white shadow rounded-xl"
-              >
-                <div>
-                  <h3 className="font-semibold">{item.product_name}</h3>
-                  <p>₹ {item.price}</p>
-                </div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#4e342e]">
+          Your Cart 🛒
+        </h1>
 
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={() =>
-                      updateQuantity(item.id, item.quantity - 1)
-                    }
-                    className="px-2 bg-gray-200 rounded"
-                  >
-                    -
-                  </button>
-
-                  <span>{item.quantity}</span>
-
-                  <button
-                    onClick={() =>
-                      updateQuantity(item.id, item.quantity + 1)
-                    }
-                    className="px-2 bg-gray-200 rounded"
-                  >
-                    +
-                  </button>
-
-                  <button
-                    onClick={() => removeItem(item.id)}
-                    className="text-red-600"
-                  >
-                    Remove
-                  </button>
-                </div>
+        {cart.items.length === 0 ? (
+          <div className="p-4 bg-white shadow sm:p-6 rounded-xl">
+            Cart is empty
+          </div>
+        ) : (
+          cart.items.map((item) => (
+            <div
+              key={item.id}
+              className="flex flex-col gap-4 p-4 bg-white shadow sm:flex-row sm:justify-between sm:items-center sm:p-6 rounded-xl"
+            >
+              {/* LEFT */}
+              <div>
+                <h3 className="text-sm font-semibold sm:text-base">
+                  {item.product_name}
+                </h3>
+                <p className="text-sm">₹ {item.price}</p>
               </div>
+
+              {/* RIGHT */}
+              <div className="flex flex-wrap items-center gap-3">
+
+                <button
+                  onClick={() =>
+                    updateQuantity(item.id, item.quantity - 1)
+                  }
+                  className="px-2 py-1 bg-gray-200 rounded"
+                >
+                  -
+                </button>
+
+                <span className="min-w-[20px] text-center">
+                  {item.quantity}
+                </span>
+
+                <button
+                  onClick={() =>
+                    updateQuantity(item.id, item.quantity + 1)
+                  }
+                  className="px-2 py-1 bg-gray-200 rounded"
+                >
+                  +
+                </button>
+
+                <button
+                  onClick={() => removeItem(item.id)}
+                  className="text-sm text-red-600"
+                >
+                  Remove
+                </button>
+
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* ================= RIGHT SIDE ================= */}
+      <div className="w-full p-5 bg-white shadow-lg sm:p-8 rounded-2xl">
+
+        <h2 className="mb-4 text-lg font-bold sm:text-xl">
+          Order Summary
+        </h2>
+
+        <p>Items Total: ₹ {cart.total_amount}</p>
+        <p>Delivery Fee: ₹ {deliveryFee}</p>
+
+        {discount > 0 && (
+          <p className="text-green-600">
+            Discount: -₹ {discount}
+          </p>
+        )}
+
+        <hr className="my-3" />
+
+        <p className="text-base font-bold sm:text-lg">
+          Final Total: ₹ {calculatedTotal}
+        </p>
+
+        {/* ADDRESS */}
+        <select
+          value={selectedAddress ?? ""}
+          onChange={(e) =>
+            setSelectedAddress(Number(e.target.value))
+          }
+          className="w-full p-2 mt-4 border rounded"
+        >
+          {addresses.length === 0 ? (
+            <option>No address found</option>
+          ) : (
+            addresses.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.full_name} - {a.city}
+              </option>
             ))
           )}
-        </div>
+        </select>
 
-        <div className="p-8 bg-white shadow-lg rounded-2xl h-fit">
-
-          <h2 className="mb-4 text-xl font-bold">Order Summary</h2>
-
-          <p>Items Total: ₹ {cart.total_amount}</p>
-          <p>Delivery Fee: ₹ {deliveryFee}</p>
-
-          {discount > 0 && (
-            <p className="text-green-600">
-              Discount: -₹ {discount}
-            </p>
-          )}
-
-          <hr className="my-3" />
-
-          <p className="text-lg font-bold">
-            Final Total: ₹ {calculatedTotal}
-          </p>
-
-          <select
-            value={selectedAddress ?? ""}
-            onChange={(e) =>
-              setSelectedAddress(Number(e.target.value))
-            }
-            className="w-full p-2 mt-4 border rounded"
-          >
-            {addresses.length === 0 ? (
-              <option>No address found</option>
-            ) : (
-              addresses.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.full_name} - {a.city}
-                </option>
-              ))
-            )}
-          </select>
-
-          <div className="flex gap-2 mt-4">
-            <input
-              value={coupon}
-              onChange={(e) => setCoupon(e.target.value)}
-              placeholder="Enter coupon code"
-              className="flex-1 p-2 border rounded"
-            />
-
-            <button
-              onClick={applyCoupon}
-              disabled={couponLoading}
-              className="px-4 text-white bg-green-600 rounded disabled:opacity-50"
-            >
-              {couponLoading ? "Applying..." : "Apply"}
-            </button>
-          </div>
-
-          <select
-            value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value)}
-            className="w-full p-2 mt-4 border rounded"
-          >
-            <option value="ONLINE">Online Payment</option>
-            <option value="COD">Cash On Delivery</option>
-            <option value="WALLET">Wallet</option>
-          </select>
+        {/* COUPON */}
+        <div className="flex flex-col gap-2 mt-4 sm:flex-row">
+          <input
+            value={coupon}
+            onChange={(e) => setCoupon(e.target.value)}
+            placeholder="Enter coupon code"
+            className="flex-1 p-2 border rounded"
+          />
 
           <button
-            onClick={handleCheckout}
-            disabled={loading}
-            className="w-full mt-6 py-3 bg-[#6d4c41] text-white rounded-xl disabled:opacity-50"
+            onClick={applyCoupon}
+            disabled={couponLoading}
+            className="px-4 py-2 text-white bg-green-600 rounded disabled:opacity-50"
           >
-            {loading ? "Processing..." : "Checkout"}
+            {couponLoading ? "Applying..." : "Apply"}
           </button>
-
         </div>
 
+        {/* PAYMENT */}
+        <select
+          value={paymentMethod}
+          onChange={(e) => setPaymentMethod(e.target.value)}
+          className="w-full p-2 mt-4 border rounded"
+        >
+          <option value="ONLINE">Online Payment</option>
+          <option value="COD">Cash On Delivery</option>
+          <option value="WALLET">Wallet</option>
+        </select>
+
+        {/* BUTTON */}
+        <button
+          onClick={handleCheckout}
+          disabled={loading}
+          className="w-full mt-6 py-3 bg-[#6d4c41] text-white rounded-xl disabled:opacity-50"
+        >
+          {loading ? "Processing..." : "Checkout"}
+        </button>
+
       </div>
+
     </div>
-  );
+  </div>
+);
 }

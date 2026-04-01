@@ -46,10 +46,11 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
 
   const [loading, setLoading] = useState(false);
 
-  // 🔥 NEW: Freeze time when order reaches final state
+  // 🔥 Freeze time when order reaches final state
   const frozenTime = useRef(order.order_age_minutes);
 
   const getDisplayTime = () => {
+
     const isFinal =
       order.status === "DELIVERED" ||
       order.status === "COMPLETED" ||
@@ -62,11 +63,20 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
     return order.order_age_minutes;
   };
 
+  // ==============================
+  // ⚙️ HANDLE ACTION (SAFE)
+  // ==============================
   const handleAction = async (action: string) => {
 
     if (loading) return;
 
+    if (!order?.id) {
+      console.error("Invalid order");
+      return;
+    }
+
     try {
+
       setLoading(true);
 
       console.log("ACTION:", action, "ORDER:", order.id);
@@ -76,15 +86,18 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
       refresh();
 
     } catch (error: any) {
+
       console.error("Order action error:", error);
       alert(error?.message || "Action failed");
-    } finally {
-      setLoading(false);
-    }
 
+    } finally {
+
+      setLoading(false);
+
+    }
   };
 
-  const isUrgent = order.order_age_minutes > 20;
+  const isUrgent = Number(order.order_age_minutes) > 20;
 
   const statusColor: Record<OrderStatus, string> = {
     PENDING: "bg-yellow-500",
@@ -109,19 +122,23 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
 
       {/* HEADER */}
       <div className="flex items-center justify-between mb-4">
+
         <div>
+
           <h2 className="text-xl font-bold text-[#4e342e]">
-            Order #{order.id}
+            Order #{order?.id}
           </h2>
 
           <p className="text-sm text-[#6d4c41]">
-            {order.customer_name}
+            {order?.customer_name || "Customer"}
           </p>
+
         </div>
 
         <div className="text-right">
+
           <p className="text-lg font-semibold text-[#3e2723]">
-            ₹ {Number(order.total_amount).toFixed(2)}
+            ₹ {Number(order?.total_amount || 0).toFixed(2)}
           </p>
 
           <p
@@ -133,11 +150,14 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
           >
             {getDisplayTime()} mins ago
           </p>
+
         </div>
+
       </div>
 
       {/* STATUS */}
       <div className="flex flex-wrap gap-2 mb-4">
+
         <span
           className={`px-3 py-1 text-xs font-medium text-white rounded-full ${statusColor[order.status]}`}
         >
@@ -149,41 +169,54 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
             {order.payment_status}
           </span>
         )}
+
       </div>
 
       {/* ITEMS */}
       <div className="pt-4 mb-4 border-t border-[#e6d5c3]">
+
         <h4 className="mb-2 font-semibold text-[#4e342e]">
           Items ({order.total_items})
         </h4>
 
         <div className="space-y-1 text-sm text-[#5d4037]">
-          {order.items.map((item) => (
+
+          {Array.isArray(order.items) && order.items.map((item) => (
+
             <div key={item.id} className="flex justify-between">
+
               <span>
                 {item.product_name} × {item.quantity}
               </span>
-              <span>₹ {item.total_price}</span>
+
+              <span>₹ {Number(item.total_price) || 0}</span>
+
             </div>
+
           ))}
+
         </div>
+
       </div>
 
       {/* DELIVERY */}
       {order.pidge_order_id && (
         <div className="mb-4 text-sm text-[#6d4c41] bg-[#efebe9] p-3 rounded-lg">
           🚚 Pidge Delivery
+
           {order.tracking_url && (
             <div className="mt-1">
               <a
                 href={order.tracking_url}
                 target="_blank"
+                rel="noreferrer"
                 className="text-blue-600 underline"
               >
                 Track Order
               </a>
             </div>
           )}
+
         </div>
       )}
 
@@ -203,7 +236,7 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
               onClick={() => handleAction("accept")}
               className="px-4 py-2 text-white bg-[#5d4037] rounded-lg hover:bg-[#4e342e]"
             >
-              Accept
+              {loading ? "Processing..." : "Accept"}
             </button>
 
             <button
@@ -211,7 +244,7 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
               onClick={() => handleAction("reject")}
               className="px-4 py-2 text-white bg-red-500 rounded-lg hover:bg-red-600"
             >
-              Reject
+              {loading ? "Processing..." : "Reject"}
             </button>
           </>
         )}
@@ -222,7 +255,7 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
             onClick={() => handleAction("preparing")}
             className="px-4 py-2 text-white bg-[#6d4c41] rounded-lg hover:bg-[#5d4037]"
           >
-            Start Preparing
+            {loading ? "Processing..." : "Start Preparing"}
           </button>
         )}
 
@@ -232,7 +265,7 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
             onClick={() => handleAction("ready")}
             className="px-4 py-2 text-white bg-[#8d6e63] rounded-lg hover:bg-[#6d4c41]"
           >
-            Mark Ready
+            {loading ? "Processing..." : "Mark Ready"}
           </button>
         )}
 
@@ -242,7 +275,7 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
             onClick={() => handleAction("dispatch")}
             className="px-4 py-2 text-white bg-green-700 rounded-lg hover:bg-green-800"
           >
-            Dispatch Order
+            {loading ? "Processing..." : "Dispatch Order"}
           </button>
         )}
 
@@ -252,7 +285,7 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
             onClick={() => handleAction("deliver")}
             className="px-4 py-2 text-white bg-black rounded-lg hover:bg-gray-800"
           >
-            Delivered
+            {loading ? "Processing..." : "Delivered"}
           </button>
         )}
 

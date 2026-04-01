@@ -12,6 +12,25 @@ export default function Login() {
 
   const hasRedirected = useRef(false);
 
+  // ==============================
+  // 🔐 TOKEN HELPER (ADDED)
+  // ==============================
+  const getClerkToken = async () => {
+
+    let token: string | null = null;
+
+    for (let i = 0; i < 3; i++) {
+      try {
+        token = await getToken({ template: "default" });
+        if (token) break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+
+    return token;
+  };
+
   useEffect(() => {
 
     const handleRedirect = async () => {
@@ -24,7 +43,7 @@ export default function Login() {
 
       try {
 
-        const token = await getToken({ template: "default" });
+        const token = await getClerkToken();
 
         if (!token) {
           console.error(" Token missing");
@@ -49,6 +68,9 @@ export default function Login() {
 
         if (!res.ok) {
           console.error(" Profile API failed:", data);
+
+          // ✅ fallback redirect (ADDED, no removal)
+          navigate("/");
           return;
         }
 
@@ -73,6 +95,9 @@ export default function Login() {
 
         console.error(" Redirect error:", err);
 
+        // ✅ safe fallback (ADDED)
+        navigate("/");
+
       }
 
     };
@@ -80,6 +105,10 @@ export default function Login() {
     handleRedirect();
 
   }, [isSignedIn, isLoaded, navigate, getToken]);
+
+  // ==============================
+  // ⏳ LOADING
+  // ==============================
   if (!isLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
@@ -90,6 +119,9 @@ export default function Login() {
     );
   }
 
+  // ==============================
+  // 🧱 UI
+  // ==============================
   return (
     <div className="flex items-center justify-center min-h-screen bg-[#f3e5d8]">
       <SignIn />

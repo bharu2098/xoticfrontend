@@ -107,7 +107,7 @@ const fetchDashboard = useCallback(async () => {
     }
 
     const res = await fetch(
-      `${API_BASE}/api/orders/admin/kitchen-dashboard/`,
+      `${API_BASE}/orders/admin/kitchen-dashboard/`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -156,7 +156,7 @@ useEffect(() => {
 
 const fetchProducts = async () => {
   try {
-    const res = await authFetch(`${API_BASE}/api/products/`);
+    const res = await authFetch(`${API_BASE}/products/admin/products/`);
 
     if (!res) {
       console.log("❌ Products API no response");
@@ -191,7 +191,7 @@ const fetchProducts = async () => {
 
 const fetchCategories = async () => {
   try {
-    const res = await authFetch(`${API_BASE}/api/kitchen/admin/categories/`);
+    const res = await authFetch(`${API_BASE}/kitchen/admin/categories/`);
 
     if (!res) {
       console.log("❌ Categories API no response");
@@ -216,7 +216,7 @@ const fetchCategories = async () => {
 
 const fetchKitchens = async () => {
   try {
-    const res = await authFetch(`${API_BASE}/api/kitchen/admin/kitchens/`);
+    const res = await authFetch(`${API_BASE}/kitchen/admin/kitchens/`);
 
     if (!res) {
       console.log("❌ Kitchens API no response");
@@ -245,7 +245,7 @@ const deleteProduct = async (id: number) => {
 
   try {
     const res = await authFetch(
-      `${API_BASE}/api/products/${id}/`,
+      `${API_BASE}/products/admin/products/${id}/`,
       { method: "DELETE" }
     );
 
@@ -271,7 +271,6 @@ const deleteProduct = async (id: number) => {
 };
 
 /* ================= CREATE PRODUCT ================= */
-
 const createProduct = async () => {
 
   if (!form.name) {
@@ -284,32 +283,44 @@ const createProduct = async () => {
     return;
   }
 
+  if (!form.category) {
+    alert("Please select category");
+    return;
+  }
+
   try {
     const fd = new FormData();
 
     fd.append("name", form.name);
+
     fd.append(
       "slug",
       form.slug || form.name.toLowerCase().replace(/\s+/g, "-")
     );
+
     fd.append("price", form.price);
 
     fd.append("description", form.description || "");
     fd.append("stock_quantity", form.stock_quantity || "0");
+
     fd.append("is_available", String(form.is_available));
     fd.append("is_featured", String(form.is_featured));
 
-    if (form.category) fd.append("category", form.category);
-    if (form.kitchen) fd.append("kitchen", form.kitchen);
+    // ✅ ONLY CATEGORY (NO KITCHEN)
+    fd.append("category", form.category);
 
+    // ✅ IMAGE
     if (form.image) {
       fd.append("image", form.image);
     }
 
-    const res = await authFetch(`${API_BASE}/api/products/`, {
-      method: "POST",
-      body: fd,
-    });
+    const res = await authFetch(
+      `${API_BASE}/products/admin/products/`,
+      {
+        method: "POST",
+        body: fd,
+      }
+    );
 
     if (!res) {
       console.log("❌ Create API no response");
@@ -319,6 +330,7 @@ const createProduct = async () => {
     if (!res.ok) {
       const err = await res.text();
       console.log("❌ Create error:", err);
+      alert(err); // 👈 shows real backend error
       throw new Error();
     }
 
@@ -326,6 +338,7 @@ const createProduct = async () => {
 
     alert("✅ Product Added");
 
+    // ✅ RESET FORM (NO KITCHEN)
     setForm({
       name: "",
       slug: "",
@@ -336,7 +349,7 @@ const createProduct = async () => {
       is_featured: false,
       stock_quantity: "",
       category: "",
-      kitchen: "",
+      kitchen:"",
     });
 
     setShowAddForm(false);
@@ -358,7 +371,7 @@ const updateStatus = async (newStatus: KitchenStatus) => {
     setUpdating(true);
 
     const res = await authFetch(
-      `${API_BASE}/api/orders/admin/kitchen-status-toggle/`,
+      `${API_BASE}/orders/admin/kitchen-status-toggle/`,
       {
         method: "POST",
         body: JSON.stringify({ status: newStatus }),
