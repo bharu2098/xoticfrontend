@@ -16,6 +16,7 @@ interface Kitchen {
   city: string;
   address: string;
   phone_number: string;
+  pincode: string; // ✅ ADDED
   latitude: string;
   longitude: string;
   status: "ONLINE" | "OFFLINE" | "BUSY" | "CLOSED";
@@ -31,6 +32,7 @@ interface KitchenForm {
   city: string;
   address: string;
   phone_number: string;
+  pincode: string; // ✅ ADDED
   latitude: string;
   longitude: string;
   status: "ONLINE" | "OFFLINE" | "BUSY" | "CLOSED";
@@ -67,7 +69,7 @@ const MapPicker = ({
 
   return (
     <MapContainer
-      key={`${formData.latitude}-${formData.longitude}`} 
+      key={`${formData.latitude}-${formData.longitude}`}
       center={position}
       zoom={12}
       style={{ height: 250 }}
@@ -97,6 +99,7 @@ const Input = ({ label, value, onChange, type = "text" }: InputProps) => (
     />
   </div>
 );
+
 export default function AdminKitchens() {
   const [kitchens, setKitchens] = useState<Kitchen[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,6 +113,7 @@ export default function AdminKitchens() {
     city: "",
     address: "",
     phone_number: "",
+    pincode: "", // ✅ ADDED
     latitude: "",
     longitude: "",
     status: "OFFLINE",
@@ -138,9 +142,8 @@ export default function AdminKitchens() {
       } else {
         setKitchens([]);
       }
-
     } catch (err: any) {
-      console.error(" Fetch kitchens error:", err);
+      console.error("Fetch kitchens error:", err);
       alert(err?.message || "Failed to load kitchens");
     } finally {
       setLoading(false);
@@ -191,6 +194,11 @@ export default function AdminKitchens() {
       return;
     }
 
+    if (!formData.pincode) {
+      alert("Pincode is required"); // ✅ FIX
+      return;
+    }
+
     const payload = {
       ...formData,
       owner: Number(formData.owner),
@@ -215,9 +223,8 @@ export default function AdminKitchens() {
 
       resetForm();
       fetchKitchens();
-
     } catch (err: any) {
-      console.error(" Save error:", err);
+      console.error("Save error:", err);
       alert(err?.message || "Failed to save kitchen");
     }
   };
@@ -232,7 +239,7 @@ export default function AdminKitchens() {
 
       fetchKitchens();
     } catch (err: any) {
-      console.error(" Delete error:", err);
+      console.error("Delete error:", err);
       alert(err?.message || "Delete failed");
     }
   };
@@ -244,6 +251,7 @@ export default function AdminKitchens() {
     setFormData({
       ...k,
       owner: String(k.owner),
+      pincode: k.pincode || "", // ✅ FIX
       latitude: k.latitude ? String(k.latitude) : "",
       longitude: k.longitude ? String(k.longitude) : "",
       opening_time: k.opening_time?.slice(0, 5),
@@ -261,6 +269,7 @@ export default function AdminKitchens() {
       city: "",
       address: "",
       phone_number: "",
+      pincode: "", // ✅ FIX
       latitude: "",
       longitude: "",
       status: "OFFLINE",
@@ -303,6 +312,7 @@ export default function AdminKitchens() {
             <Input label="Name" value={formData.name} onChange={(v)=>setFormData({...formData, name:v})} />
             <Input label="City" value={formData.city} onChange={(v)=>setFormData({...formData, city:v})} />
             <Input label="Phone" value={formData.phone_number} onChange={(v)=>setFormData({...formData, phone_number:v})} />
+            <Input label="Pincode" value={formData.pincode} onChange={(v)=>setFormData({...formData, pincode:v})} /> {/* ✅ FIX */}
             <Input label="Opening Time" type="time" value={formData.opening_time} onChange={(v)=>setFormData({...formData, opening_time:v})} />
             <Input label="Closing Time" type="time" value={formData.closing_time} onChange={(v)=>setFormData({...formData, closing_time:v})} />
           </div>

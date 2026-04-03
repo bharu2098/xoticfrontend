@@ -38,13 +38,15 @@ export function useApi() {
       }
 
       // ==============================
-      // 🔑 TOKEN (WITH RETRY)
+      // 🔑 TOKEN (FIXED)
       // ==============================
       let token: string | null = null;
 
       for (let i = 0; i < 3; i++) {
         try {
-          token = await getToken({ template: "default" });
+          // 🔥 FIX: remove template OR ensure correct one
+          token = await getToken(); // ✅ IMPORTANT CHANGE
+
           if (token) break;
         } catch (err) {
           console.warn("Token retry...");
@@ -58,6 +60,8 @@ export function useApi() {
           status: 401,
         } as ApiError;
       }
+
+      console.log("🔥 TOKEN SENT:", token.substring(0, 30)); // DEBUG
 
       // ==============================
       // 📦 HEADERS
@@ -74,6 +78,8 @@ export function useApi() {
       if (useIdempotency) {
         headers["Idempotency-Key"] = crypto.randomUUID();
       }
+
+      console.log("📡 HEADERS:", headers); // DEBUG
 
       // ==============================
       // 🌐 REQUEST
@@ -92,6 +98,8 @@ export function useApi() {
       const url = `${API_BASE}${
         endpoint.startsWith("/") ? endpoint : `/${endpoint}`
       }`;
+
+      console.log("🌍 API CALL:", url); // DEBUG
 
       const response = await fetch(url, options);
 
@@ -140,12 +148,14 @@ export function useApi() {
       // 🔴 ERROR HANDLING
       // ==============================
       if (!response.ok) {
+        console.error("❌ RESPONSE ERROR:", response.status, data);
+
         if (response.status >= 500) {
           console.error("Server error:", data);
         }
 
         if (response.status === 403) {
-          console.warn("Permission denied");
+          console.warn("🚫 Permission denied");
         }
 
         throw {
@@ -158,6 +168,8 @@ export function useApi() {
           data,
         } as ApiError;
       }
+
+      console.log("✅ RESPONSE SUCCESS:", data);
 
       return data as T;
 

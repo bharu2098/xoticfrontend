@@ -101,6 +101,7 @@ let clerkTokenGetter: (() => Promise<string | null>) | null = null;
 export const setClerkTokenGetter = (
   getter: () => Promise<string | null>
 ) => {
+  console.log("✅ Clerk token getter initialized");
   clerkTokenGetter = getter;
 };
 
@@ -110,17 +111,24 @@ export const setClerkTokenGetter = (
 const getAuthHeaders = async (): Promise<Record<string, string>> => {
   let token: string | null = null;
 
-  // retry to avoid race condition
-  for (let i = 0; i < 5; i++) {
+  // 🔥 FIX: stronger retry (prevents AnonymousUser issue)
+  for (let i = 0; i < 10; i++) {
     if (clerkTokenGetter) {
       try {
         token = await clerkTokenGetter();
-        if (token) break;
+
+        if (token) {
+          console.log("✅ TOKEN FOUND:", token.slice(0, 25));
+          break;
+        }
       } catch (err) {
-        console.error("Token fetch error:", err);
+        console.error("❌ Token fetch error:", err);
       }
+    } else {
+      console.warn("⚠️ clerkTokenGetter not ready yet");
     }
-    await new Promise((r) => setTimeout(r, 100));
+
+    await new Promise((r) => setTimeout(r, 200));
   }
 
   const headers: Record<string, string> = {};
@@ -128,7 +136,7 @@ const getAuthHeaders = async (): Promise<Record<string, string>> => {
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   } else {
-    console.warn("⚠️ No Clerk token available");
+    console.error("🚨 NO TOKEN → request will be AnonymousUser");
   }
 
   return headers;
@@ -145,6 +153,9 @@ export const apiRequest = async <T>(
 
   const authHeaders = await getAuthHeaders();
 
+  console.log("📡 API REQUEST:", endpoint);
+  console.log("🔐 AUTH HEADERS:", authHeaders);
+
   const finalHeaders: Record<string, string> = {
     ...authHeaders,
     ...(options.headers as Record<string, string>),
@@ -159,7 +170,7 @@ export const apiRequest = async <T>(
     headers: finalHeaders,
   });
 
-  console.log("API:", endpoint, response.status);
+  console.log("📥 RESPONSE:", endpoint, response.status);
 
   // 🔴 AUTH FAIL
   if (response.status === 401) {
@@ -168,6 +179,7 @@ export const apiRequest = async <T>(
 
   // 🔴 PERMISSION FAIL
   if (response.status === 403) {
+    console.error("❌ 403 Forbidden → token missing or user not admin");
     throw new Error("Permission denied.");
   }
 
@@ -203,6 +215,8 @@ export const createKitchenSocket = async () => {
 
   const token = await clerkTokenGetter();
   if (!token) return null;
+
+  console.log("🔌 WS TOKEN:", token.slice(0, 20));
 
   const ws = new WebSocket(
     `${WS_BASE}/ws/kitchen/?token=${token}`
