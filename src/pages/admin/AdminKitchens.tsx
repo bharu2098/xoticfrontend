@@ -55,17 +55,60 @@ const MapPicker = ({
   const position: [number, number] = [lat, lng];
 
   const MapClickHandler = () => {
-    useMapEvents({
-      click(e) {
+  useMapEvents({
+    async click(e) {
+      const lat = Number(e.latlng.lat.toFixed(6));
+      const lng = Number(e.latlng.lng.toFixed(6));
+
+      try {
+        const res = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`
+        );
+
+        const data = await res.json();
+        const result = data.results?.[0];
+
+        let address = "";
+        let city = "";
+        let pincode = "";
+
+        if (result) {
+          address = result.formatted_address;
+
+          result.address_components.forEach((comp: any) => {
+            if (comp.types.includes("locality")) {
+              city = comp.long_name;
+            }
+            if (comp.types.includes("postal_code")) {
+              pincode = comp.long_name;
+            }
+          });
+        }
+
         setFormData((prev) => ({
           ...prev,
-          latitude: e.latlng.lat.toFixed(6),
-          longitude: e.latlng.lng.toFixed(6),
+          latitude: lat.toString(),
+          longitude: lng.toString(),
+          address: address || prev.address,
+          city: city || prev.city,
+          pincode: pincode || prev.pincode,
         }));
-      },
-    });
-    return null;
-  };
+
+      } catch (err) {
+        console.error("Map error:", err);
+
+        // fallback (still set lat/lng)
+        setFormData((prev) => ({
+          ...prev,
+          latitude: lat.toString(),
+          longitude: lng.toString(),
+        }));
+      }
+    },
+  });
+
+  return null;
+};
 
   return (
     <MapContainer

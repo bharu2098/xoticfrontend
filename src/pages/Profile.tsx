@@ -1,28 +1,8 @@
 import { useEffect, useState } from "react";
 import { useAuthContext } from "../context/AuthContext";
 import { useApi } from "../services/api";
+import MapPicker from "../components/MapPicker";
 
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  useMapEvents,
-  useMap
-} from "react-leaflet";
-
-import L, { LatLngTuple } from "leaflet";
-import "leaflet/dist/leaflet.css";
-
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
 
 interface ProfileData {
   id: number;
@@ -50,72 +30,6 @@ interface AddressForm {
   longitude?: number;
 }
 
-// ==============================
-// 📍 MAP MARKER (SAFE)
-// ==============================
-function LocationMarker({
-  setCoords,
-}: {
-  setCoords: (data: Partial<AddressForm>) => void;
-}) {
-  const map = useMap();
-  const [position, setPosition] = useState<LatLngTuple | null>(null);
-
-  useMapEvents({
-    async click(e) {
-
-      const lat = Number(e.latlng.lat.toFixed(6));
-      const lng = Number(e.latlng.lng.toFixed(6));
-
-      if (isNaN(lat) || isNaN(lng)) return;
-
-      const newPos: LatLngTuple = [lat, lng];
-      setPosition(newPos);
-      map.flyTo(newPos, 16);
-
-      try {
-
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
-        );
-
-        const data = await res.json();
-        const addr = data?.address || {};
-
-        setCoords({
-          latitude: lat,
-          longitude: lng,
-          address_line:
-            addr.road ||
-            addr.neighbourhood ||
-            addr.suburb ||
-            addr.village ||
-            "",
-          landmark: addr.landmark || addr.suburb || "",
-          city:
-            addr.city ||
-            addr.town ||
-            addr.village ||
-            addr.county ||
-            "",
-          pincode: addr.postcode || "",
-        });
-
-      } catch (err) {
-
-        console.error("Reverse geocode error:", err);
-
-        setCoords({
-          latitude: lat,
-          longitude: lng,
-        });
-
-      }
-    },
-  });
-
-  return position ? <Marker position={position} /> : null;
-}
 
 // ==============================
 // 👤 PROFILE COMPONENT
@@ -133,13 +47,15 @@ const Profile = () => {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [newAddress, setNewAddress] = useState<AddressForm>({
-    full_name: "",
-    phone_number: "",
-    address_line: "",
-    landmark: "",
-    city: "",
-    pincode: "",
-  });
+  full_name: "",
+  phone_number: "",
+  address_line: "",
+  landmark: "",
+  city: "",
+  pincode: "",
+  latitude: 0,
+  longitude: 0,
+});
 
   // ==============================
   // 📦 FETCH DATA (SAFE)
@@ -235,27 +151,35 @@ const Profile = () => {
 
       setShowForm(false);
 
-      setNewAddress({
-        full_name: "",
-        phone_number: "",
-        address_line: "",
-        landmark: "",
-        city: "",
-        pincode: "",
-      });
+     setNewAddress({
+  full_name: "",
+  phone_number: "",
+  address_line: "",
+  landmark: "",
+  city: "",
+  pincode: "",
+  latitude: 0,
+  longitude: 0,
+});
+
+setEditingId(null);
 
       await fetchData();
 
-    } catch (err) {
+     } catch (err: any) {
+  console.error(" Add address error:", err);
 
-      console.error(" Add address error:", err);
-      alert("Failed to add address");
+  const msg =
+    err?.response?.data?.detail ||
+    err?.response?.data?.message ||
+    err?.message ||
+    "Failed to add address";
 
-    } finally {
+  alert(msg);
 
-      setSaving(false);
-
-    }
+} finally {
+  setSaving(false);
+}
   };
 
   // ==============================
@@ -279,17 +203,19 @@ const Profile = () => {
   };
 
   if (loading) return <div className="p-10 text-center">Loading...</div>;
-  const handleEdit = (addr: Address) => {
+const handleEdit = (addr: Address) => {
   setEditingId(addr.id);
   setShowForm(true);
 
   setNewAddress({
     full_name: addr.full_name,
-    phone_number: "",
+    phone_number: (addr as any).phone_number || "",
     address_line: addr.address_line,
     landmark: "",
     city: addr.city,
     pincode: addr.pincode,
+    latitude: (addr as any).latitude || 0,
+    longitude: (addr as any).longitude || 0,
   });
 };
 
@@ -365,91 +291,90 @@ const Profile = () => {
             </div>
 
           ))}
+{showForm && (
+  <div className="mt-6 space-y-3">
 
-          {showForm && (
+    <input
+      className="w-full p-2 border rounded"
+      placeholder="Full Name"
+      value={newAddress.full_name}
+      onChange={(e) =>
+        setNewAddress({ ...newAddress, full_name: e.target.value })
+      }
+    />
 
-            <div className="mt-6 space-y-3">
+    <input
+      className="w-full p-2 border rounded"
+      placeholder="Phone"
+      value={newAddress.phone_number}
+      onChange={(e) =>
+        setNewAddress({ ...newAddress, phone_number: e.target.value })
+      }
+    />
 
-              <input className="w-full p-2 border rounded"
-                placeholder="Full Name"
-                value={newAddress.full_name}
-                onChange={(e) =>
-                  setNewAddress({ ...newAddress, full_name: e.target.value })
-                }
-              />
+    <input
+      className="w-full p-2 bg-gray-100 border rounded"
+      placeholder="Address Line"
+      value={newAddress.address_line || ""}
+      readOnly
+    />
 
-              <input className="w-full p-2 border rounded"
-                placeholder="Phone"
-                value={newAddress.phone_number}
-                onChange={(e) =>
-                  setNewAddress({ ...newAddress, phone_number: e.target.value })
-                }
-              />
+    <input
+      className="w-full p-2 border rounded"
+      placeholder="Landmark"
+      value={newAddress.landmark || ""}
+      onChange={(e) =>
+        setNewAddress({ ...newAddress, landmark: e.target.value })
+      }
+    />
 
-              <input className="w-full p-2 border rounded"
-                placeholder="Address Line"
-                value={newAddress.address_line}
-                onChange={(e) =>
-                  setNewAddress({ ...newAddress, address_line: e.target.value })
-                }
-              />
+    <input
+      className="w-full p-2 bg-gray-100 border rounded"
+      placeholder="City"
+      value={newAddress.city || ""}
+      readOnly
+    />
 
-              <input className="w-full p-2 border rounded"
-                placeholder="Landmark"
-                value={newAddress.landmark}
-                onChange={(e) =>
-                  setNewAddress({ ...newAddress, landmark: e.target.value })
-                }
-              />
+    <input
+      className="w-full p-2 bg-gray-100 border rounded"
+      placeholder="Pincode"
+      value={newAddress.pincode || ""}
+      readOnly
+    />
 
-              <input className="w-full p-2 border rounded"
-                placeholder="City"
-                value={newAddress.city}
-                onChange={(e) =>
-                  setNewAddress({ ...newAddress, city: e.target.value })
-                }
-              />
+    <MapPicker
+      setCoords={(c: Partial<AddressForm>) => {
+        setNewAddress((prev) => ({
+          ...prev,
+          ...c,
+        }));
+      }}
+    />
 
-              <input className="w-full p-2 border rounded"
-                placeholder="Pincode"
-                value={newAddress.pincode}
-                onChange={(e) =>
-                  setNewAddress({ ...newAddress, pincode: e.target.value })
-                }
-              />
+    <button
+      onClick={handleAddAddress}
+      disabled={saving}
+      className={`w-full py-2 text-white rounded ${
+        saving ? "bg-gray-400" : "bg-black"
+      }`}
+    >
+      {saving
+        ? "Saving..."
+        : editingId
+        ? "Update Address"
+        : "Save Address"}
+    </button>
 
-              <MapContainer center={[17.7, 83.3]} zoom={13} style={{ height: 300 }}>
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                <LocationMarker
-                  setCoords={(c) =>
-                    setNewAddress((prev) => ({ ...prev, ...c }))
-                  }
-                />
-              </MapContainer>
-
-              <button
-                onClick={handleAddAddress}
-                disabled={saving}
-                className={`w-full py-2 text-white rounded ${
-                  saving ? "bg-gray-400" : "bg-black"
-                }`}
-              >
-               {saving
-  ? "Saving..."
-  : editingId
-  ? "Update Address"
-  : "Save Address"}
-              </button>
+  </div>
+)}
 
             </div>
 
-          )}
+          
 
         </div>
 
       </div>
-
-    </div>
   );
 };
 

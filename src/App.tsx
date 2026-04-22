@@ -51,7 +51,7 @@ const LoadingScreen = () => (
 );
 
 // ==============================
-// 🔐 AUTH GUARDS (UNCHANGED)
+// 🔐 AUTH GUARDS
 // ==============================
 const RequireAuth = () => {
   const { loading } = useAuthContext();
@@ -92,13 +92,12 @@ const RequireAdmin = () => {
 };
 
 // ==============================
-// 🧩 MAIN LAYOUT (FIXED)
+// 🧩 MAIN LAYOUT
 // ==============================
 const MainLayout = () => (
   <div className="w-full min-h-screen">
     <Navbar />
 
-    {/* ✅ FIX: better spacing */}
     <div className="w-full px-2 sm:px-4 md:px-6">
       <Outlet />
     </div>
@@ -106,7 +105,7 @@ const MainLayout = () => (
 );
 
 // ==============================
-// 🧩 ADMIN LAYOUT (RESPONSIVE)
+// 🧩 ADMIN LAYOUT
 // ==============================
 const Section = ({ label }: { label: string }) => (
   <div className="pt-4 text-xs text-orange-200 uppercase">{label}</div>
@@ -132,7 +131,6 @@ const AdminLayout = () => {
   return (
     <div className="flex w-full min-h-screen bg-[#fdf6f0]">
 
-      {/* ✅ MOBILE TOGGLE */}
       <button
         className="fixed z-50 p-2 text-white bg-[#5a2d0c] md:hidden top-4 left-4 rounded"
         onClick={() => setOpen(!open)}
@@ -140,7 +138,6 @@ const AdminLayout = () => {
         ☰
       </button>
 
-      {/* SIDEBAR */}
       <aside
         className={`fixed md:relative z-40 w-64 md:w-72 bg-[#5a2d0c] text-white flex flex-col h-full transition-transform ${
           open ? "translate-x-0" : "-translate-x-full md:translate-x-0"
@@ -175,8 +172,8 @@ const AdminLayout = () => {
         </div>
       </aside>
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 w-full p-4 overflow-y-auto md:p-8">
+      {/* 🔥 FIX HERE */}
+      <main className="flex-1 w-full p-4 overflow-y-visible md:p-8">
         <Outlet />
       </main>
     </div>
@@ -184,7 +181,7 @@ const AdminLayout = () => {
 };
 
 // ==============================
-// 🚀 APP (UNCHANGED LOGIC)
+// 🚀 APP
 // ==============================
 export default function App() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
