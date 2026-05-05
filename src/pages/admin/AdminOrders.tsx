@@ -139,9 +139,9 @@ const token = await getToken();
       setProcessingId(id);
 
       const res = await authFetch(
-        `${API_ROOT}/kitchen/orders/${id}/${action}/`,
-        { method: "POST" }
-      );
+  `${API_ROOT}/orders/admin/orders/${id}/${action}/`,
+  { method: "PATCH" }
+);
 
       if (!res || !res.ok) {
         alert("Action failed");
@@ -278,64 +278,71 @@ const token = await getToken();
 
                 {/* ✅ FIXED ACTION COLUMN */}
                 <td className="flex flex-wrap justify-center gap-2 px-6 py-4 text-center whitespace-nowrap">
-
-  {/* ✅ ACCEPT */}
-  {order.status === "PENDING" && (
+{/* ✅ ACCEPT / REJECT */}
+{order.status === "PENDING" && (
+  <>
     <ActionBtn
       label="Accept"
       color="bg-blue-600"
       onClick={() => updateStatus(order.id, "accept")}
       processing={processingId === order.id}
     />
-  )}
-
-  {/* ✅ REJECT */}
-  {order.status === "PENDING" && (
     <ActionBtn
       label="Reject"
       color="bg-red-600"
       onClick={() => updateStatus(order.id, "reject")}
       processing={processingId === order.id}
     />
-  )}
+  </>
+)}
 
-  {/* ✅ PREPARING / CONFIRMED → READY */}
-  {(order.status === "CONFIRMED" || order.status === "PREPARING") && (
-    <ActionBtn
-      label="Mark Ready"
-      color="bg-purple-600"
-      onClick={() => updateStatus(order.id, "ready")}
-      processing={processingId === order.id}
-    />
-  )}
+{/* ✅ CONFIRMED → PREPARING */}
+{order.status === "CONFIRMED" && (
+  <ActionBtn
+    label="Start Preparing"
+    color="bg-blue-600"
+    onClick={() => updateStatus(order.id, "preparing")}
+    processing={processingId === order.id}
+  />
+)}
 
-  {/* ✅ READY → DISPATCH */}
-  {order.status === "READY" && (
-    <ActionBtn
-      label="Dispatch"
-      color="bg-indigo-600"
-      onClick={() => updateStatus(order.id, "dispatch")}
-      processing={processingId === order.id}
-    />
-  )}
+{/* ✅ PREPARING → READY */}
+{order.status === "PREPARING" && (
+  <ActionBtn
+    label="Mark Ready"
+    color="bg-purple-600"
+    onClick={() => updateStatus(order.id, "ready")}
+    processing={processingId === order.id}
+  />
+)}
 
-  {/* ✅ DISPATCHED → DELIVERED */}
-  {order.status === "OUT_FOR_DELIVERY" && (
-    <ActionBtn
-      label="Delivered"
-      color="bg-green-700"
-      onClick={() => updateStatus(order.id, "deliver")}
-      processing={processingId === order.id}
-    />
-  )}
+{/* ✅ READY → DISPATCH */}
+{order.status === "READY" && (
+  <ActionBtn
+    label="Dispatch"
+    color="bg-indigo-600"
+    onClick={() => updateStatus(order.id, "dispatch-order")}  // 🔥 FIXED
+    processing={processingId === order.id}
+  />
+)}
 
-  {/* ✅ ALWAYS VIEW */}
-  <button
-    onClick={() => navigate(`/admin/orders/${order.id}`)}
-    className="px-3 py-2 text-xs text-white bg-[#7a2e00] rounded-lg"
-  >
-    View
-  </button>
+{/* ✅ OUT_FOR_DELIVERY → DELIVERED */}
+{order.status === "OUT_FOR_DELIVERY" && (
+  <ActionBtn
+    label="Delivered"
+    color="bg-green-700"
+    onClick={() => updateStatus(order.id, "deliver")}
+    processing={processingId === order.id}
+  />
+)}
+
+{/* ✅ ALWAYS VIEW */}
+<button
+  onClick={() => navigate(`/admin/orders/${order.id}`)}
+  className="px-3 py-2 text-xs text-white bg-[#7a2e00] rounded-lg"
+>
+  View
+</button>
 
 </td>
 

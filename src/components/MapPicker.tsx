@@ -1,7 +1,13 @@
-import { GoogleMap, useLoadScript } from "@react-google-maps/api";
-import { useRef } from "react";
+import {
+  GoogleMap,
+  useLoadScript,
+  Autocomplete,
+} from "@react-google-maps/api";
+import { useRef, useCallback, useEffect } from "react";
 
-const center = { lat: 17.7, lng: 83.3 };
+const LIBRARIES: ("places")[] = ["places"];
+
+const defaultCenter = { lat: 17.7, lng: 83.3 };
 
 type Coords = {
   latitude: number;
@@ -14,133 +20,188 @@ type Coords = {
 
 export default function MapPicker({
   setCoords,
+  latitude,
+  longitude,
 }: {
   setCoords: (data: Partial<Coords>) => void;
+  latitude?: number;
+  longitude?: number;
 }) {
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    libraries: LIBRARIES,
   });
 
   const mapRef = useRef<google.maps.Map | null>(null);
+  const autoRef = useRef<google.maps.places.Autocomplete | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ✅ CENTER
+  const mapCenter =
+    latitude && longitude
+      ? { lat: Number(latitude), lng: Number(longitude) }
+      : defaultCenter;
+
+  // ✅ EDIT SYNC
+  useEffect(() => {
+    if (latitude && longitude && mapRef.current) {
+      const center = {
+        lat: Number(latitude),
+        lng: Number(longitude),
+      };
+
+      mapRef.current.panTo(center);
+      mapRef.current.setZoom(17);
+    }
+  }, [latitude, longitude]);
+
+  // ✅ GEOCODE
+  const fetchAddress = useCallback(
+    async (lat: number, lng: number) => {
+      try {
+        const res = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`
+        );
+
+        const data = await res.json();
+        if (data.status !== "OK" || !data.results?.length) return;
+
+        const result = data.results[0];
+
+        let city = "";
+        let pincode = "";
+        let landmark = "";
+
+        result.address_components.forEach((comp: any) => {
+          const types = comp.types;
+
+          if (types.includes("postal_code")) {
+            pincode = comp.long_name;
+          }
+
+          if (
+            types.includes("locality") ||
+            types.includes("postal_town") ||
+            types.includes("administrative_area_level_2")
+          ) {
+            if (!city) city = comp.long_name;
+          }
+
+          if (
+            types.includes("sublocality") ||
+            types.includes("sublocality_level_1") ||
+            types.includes("route") ||
+            types.includes("neighborhood") ||
+            types.includes("point_of_interest")
+          ) {
+            if (!landmark) landmark = comp.long_name;
+          }
+        });
+
+        if (!city) city = result.formatted_address;
+        if (!landmark) landmark = result.formatted_address;
+
+        setCoords({
+          latitude: Number(lat.toFixed(8)),
+          longitude: Number(lng.toFixed(8)),
+          address_line: result.formatted_address,
+          city: city.trim(),
+          pincode: (pincode || "").trim(),
+          landmark: landmark.trim(),
+        });
+      } catch (err) {
+        console.error("Geocode error:", err);
+      }
+    },
+    [setCoords]
+  );
+
+  // ✅ SEARCH
+  const handlePlaceSelect = () => {
+    if (!autoRef.current) return;
+
+    const place = autoRef.current.getPlace();
+    if (!place.geometry?.location) return;
+
+    const lat = place.geometry.location.lat();
+    const lng = place.geometry.location.lng();
+
+    const center = { lat, lng };
+
+    mapRef.current?.panTo(center);
+    mapRef.current?.setZoom(17);
+
+    fetchAddress(lat, lng);
+  };
 
   if (!isLoaded) return <div>Loading map...</div>;
 
-  const fetchAddress = async (lat: number, lng: number) => {
-    try {
-      const res = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`
-      );
-
-      const data = await res.json();
-      if (!data.results?.length) return;
-
-      const result = data.results[0];
-
-      let city = "";
-      let pincode = "";
-      let landmark = "";
-
-      result.address_components.forEach((comp: any) => {
-        const types = comp.types;
-
-        // ✅ CITY (handles Indian addresses properly)
-        if (
-          types.includes("locality") ||
-          types.includes("administrative_area_level_2") ||
-          types.includes("administrative_area_level_3")
-        ) {
-          if (!city) city = comp.long_name;
-        }
-
-        // ✅ PINCODE
-        if (types.includes("postal_code")) {
-          pincode = comp.long_name;
-        }
-
-        // ✅ LANDMARK (more reliable)
-        if (
-          types.includes("sublocality") ||
-          types.includes("route") ||
-          types.includes("neighborhood") ||
-          types.includes("point_of_interest") ||
-          types.includes("premise")
-        ) {
-          if (!landmark) landmark = comp.long_name;
-        }
-      });
-
-      // 🔥 FALLBACKS
-      if (!city) city = result.formatted_address;
-      if (!landmark) landmark = result.formatted_address;
-
-      console.log("✅ GEOCODE:", {
-        address_line: result.formatted_address,
-        city,
-        pincode,
-        landmark,
-      });
-
-      setCoords({
-        latitude: lat,
-        longitude: lng,
-        address_line: result.formatted_address,
-        city,
-        pincode,
-        landmark,
-      });
-    } catch (err) {
-      console.error("Geocode error:", err);
-    }
-  };
-
   return (
-    <div style={{ height: 300, width: "100%", position: "relative" }}>
-      <GoogleMap
-        zoom={15}
-        center={center} // keep static (prevents drag issues)
-        mapContainerStyle={{ width: "100%", height: "100%" }}
-        onLoad={(map) => {
-          mapRef.current = map;
-
-          const c = map.getCenter();
-          if (c) fetchAddress(c.lat(), c.lng());
-        }}
-        onIdle={() => {
-          if (!mapRef.current) return;
-
-          const c = mapRef.current.getCenter();
-          if (!c) return;
-
-          const lat = c.lat();
-          const lng = c.lng();
-
-          if (debounceRef.current) {
-            clearTimeout(debounceRef.current);
-          }
-
-          debounceRef.current = setTimeout(() => {
-            fetchAddress(lat, lng);
-          }, 500);
-        }}
-        options={{
-          gestureHandling: "greedy", // mobile drag fix
-          disableDefaultUI: true,
-        }}
-      />
-
-      {/* 📍 CENTER PIN */}
-      <div
-        style={{
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -100%)",
-          fontSize: "32px",
-          pointerEvents: "none",
-        }}
+    <div style={{ width: "100%" }}>
+      {/* SEARCH */}
+      <Autocomplete
+        onLoad={(ref) => (autoRef.current = ref)}
+        onPlaceChanged={handlePlaceSelect}
       >
-        📍
+        <input
+          placeholder="Search address..."
+          className="w-full p-2 mb-2 border rounded"
+        />
+      </Autocomplete>
+
+      {/* MAP */}
+      <div style={{ height: 300, position: "relative" }}>
+        <GoogleMap
+          zoom={15}
+          center={mapCenter}
+          mapContainerStyle={{ width: "100%", height: "100%" }}
+          options={{
+            gestureHandling: "greedy",
+            disableDefaultUI: true,
+            zoomControl: true,
+          }}
+          onLoad={(map) => {
+            mapRef.current = map;
+
+            if (!latitude || !longitude) {
+              const c = map.getCenter();
+              if (c) fetchAddress(c.lat(), c.lng());
+            }
+          }}
+
+          // 🔥🔥 FINAL FIX HERE 🔥🔥
+          onDragEnd={() => {
+            if (!mapRef.current) return;
+
+            const c = mapRef.current.getCenter();
+            if (!c) return;
+
+            const lat = c.lat();
+            const lng = c.lng();
+
+            if (debounceRef.current) {
+              clearTimeout(debounceRef.current);
+            }
+
+            debounceRef.current = setTimeout(() => {
+              fetchAddress(lat, lng);
+            }, 300);
+          }}
+        />
+
+        {/* PIN */}
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -100%)",
+            fontSize: "32px",
+            pointerEvents: "none",
+          }}
+        >
+          📍
+        </div>
       </div>
     </div>
   );

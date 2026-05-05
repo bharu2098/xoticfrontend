@@ -1,14 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { apiRequest } from "../../services/kitchenService";
 
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  useMapEvents,
-} from "react-leaflet";
-import "leaflet/dist/leaflet.css";
-
+import { GoogleMap, useLoadScript, Autocomplete } from "@react-google-maps/api";
 interface Kitchen {
   id: number;
   owner: number;
@@ -41,89 +34,161 @@ interface KitchenForm {
   opening_time: string;
   closing_time: string;
 }
-
-const MapPicker = ({
-  formData,
-  setFormData,
-}: {
+import { useRef } from "react";
+const MapPicker = ({ formData, setFormData }: {
   formData: KitchenForm;
   setFormData: React.Dispatch<React.SetStateAction<KitchenForm>>;
 }) => {
-  const lat = Number(formData.latitude) || 17.385;
-  const lng = Number(formData.longitude) || 78.486;
 
-  const position: [number, number] = [lat, lng];
-
-  const MapClickHandler = () => {
-  useMapEvents({
-    async click(e) {
-      const lat = Number(e.latlng.lat.toFixed(6));
-      const lng = Number(e.latlng.lng.toFixed(6));
-
-      try {
-        const res = await fetch(
-          `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`
-        );
-
-        const data = await res.json();
-        const result = data.results?.[0];
-
-        let address = "";
-        let city = "";
-        let pincode = "";
-
-        if (result) {
-          address = result.formatted_address;
-
-          result.address_components.forEach((comp: any) => {
-            if (comp.types.includes("locality")) {
-              city = comp.long_name;
-            }
-            if (comp.types.includes("postal_code")) {
-              pincode = comp.long_name;
-            }
-          });
-        }
-
-        setFormData((prev) => ({
-          ...prev,
-          latitude: lat.toString(),
-          longitude: lng.toString(),
-          address: address || prev.address,
-          city: city || prev.city,
-          pincode: pincode || prev.pincode,
-        }));
-
-      } catch (err) {
-        console.error("Map error:", err);
-
-        // fallback (still set lat/lng)
-        setFormData((prev) => ({
-          ...prev,
-          latitude: lat.toString(),
-          longitude: lng.toString(),
-        }));
-      }
-    },
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    libraries: ["places"],
   });
 
-  return null;
-};
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const autoRef = useRef<google.maps.places.Autocomplete | null>(null);
+
+  const lat = Number(formData.latitude) || 17.385;
+  const lng = Number(formData.longitude) || 78.486;
+  const center = { lat, lng };
+
+  // 🔥 THIS WAS MISSING
+  const handlePlaceSelect = () => {
+    const place = autoRef.current?.getPlace();
+    if (!place || !place.geometry) return;
+
+    const lat = Number(place.geometry.location?.lat().toFixed(6));
+    const lng = Number(place.geometry.location?.lng().toFixed(6));
+
+    let address = place.formatted_address || "";
+    let city = "";
+    let pincode = "";
+
+    place.address_components?.forEach((comp: any) => {
+      if (comp.types.includes("locality")) {
+        city = comp.long_name;
+      }
+      if (comp.types.includes("postal_code")) {
+        pincode = comp.long_name;
+      }
+    });
+
+    // ✅ move map
+    if (mapRef.current) {
+      mapRef.current.panTo({ lat, lng });
+      mapRef.current.setZoom(16);
+    }
+
+    // ✅ update form
+    setFormData((prev) => ({
+      ...prev,
+      latitude: lat.toString(),
+      longitude: lng.toString(),
+      address: address || prev.address,
+      city: city || prev.city,
+      pincode: pincode || prev.pincode,
+    }));
+  };
+
+  if (!isLoaded) return <div>Loading map...</div>;
 
   return (
-    <MapContainer
-      key={`${formData.latitude}-${formData.longitude}`}
-      center={position}
-      zoom={12}
-      style={{ height: 250 }}
-    >
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <Marker position={position} />
-      <MapClickHandler />
-    </MapContainer>
+    <>
+      {/* 🔍 SEARCH BAR */}
+      <Autocomplete
+  onLoad={(ref) => (autoRef.current = ref)}
+  onPlaceChanged={handlePlaceSelect}
+  options={{
+    componentRestrictions: { country: "in" }, // 🇮🇳 restrict to India
+  }}
+>
+        <input
+  type="text"
+  placeholder="Search area, city or pincode..."
+  className="w-full p-2 mb-2 border rounded"
+  autoFocus
+/>
+      </Autocomplete>
+
+      {/* 🗺 MAP */}
+      <GoogleMap
+        zoom={14}
+        center={center}
+        mapContainerStyle={{ width: "100%", height: "250px" }}
+
+        onLoad={(map) => {
+          mapRef.current = map;
+        }}
+
+        onDragEnd={async () => {
+          if (!mapRef.current) return;
+
+          const c = mapRef.current.getCenter();
+          if (!c) return;
+
+          const lat = Number(c.lat().toFixed(6));
+          const lng = Number(c.lng().toFixed(6));
+
+          try {
+            const res = await fetch(
+              `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${import.meta.env.VITE_GOOGLE_MAPS_API_KEY}`
+            );
+
+            const data = await res.json();
+            const result = data.results?.[0];
+
+            let address = "";
+            let city = "";
+            let pincode = "";
+
+            if (result) {
+              address = result.formatted_address;
+
+              result.address_components.forEach((comp: any) => {
+                if (comp.types.includes("locality")) {
+                  city = comp.long_name;
+                }
+                if (comp.types.includes("postal_code")) {
+                  pincode = comp.long_name;
+                }
+              });
+            }
+
+            setFormData((prev) => ({
+              ...prev,
+              latitude: lat.toString(),
+              longitude: lng.toString(),
+              address: address || prev.address,
+              city: city || prev.city,
+              pincode: pincode || prev.pincode,
+            }));
+          } catch (err) {
+            console.error("Map error:", err);
+          }
+        }}
+
+        options={{
+          disableDefaultUI: true,
+          gestureHandling: "greedy",
+        }}
+      >
+        {/* 📍 CENTER PIN */}
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -100%)",
+            fontSize: "28px",
+            pointerEvents: "none",
+          }}
+        >
+          📍
+        </div>
+      </GoogleMap>
+    </>
   );
 };
-
 interface InputProps {
   label: string;
   value: string;

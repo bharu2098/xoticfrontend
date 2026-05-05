@@ -2,13 +2,23 @@ import { useEffect, useState } from "react";
 import { useAuthContext } from "../context/AuthContext";
 import { useApi } from "../services/api";
 import MapPicker from "../components/MapPicker";
-
+type AddressForm = {
+  full_name: string;
+  phone_number: string;
+  address_line: string;
+  landmark: string;
+  city: string;
+  pincode: string;
+  latitude?: number;
+  longitude?: number;
+};
 
 interface ProfileData {
   id: number;
-  username: string;
+  full_name: string;
   email: string;
   phone: string;
+  profile_pic?: string;
 }
 
 interface Address {
@@ -19,11 +29,12 @@ interface Address {
   pincode: string;
 }
 
-interface AddressForm {
+interface Address {
+  id: number;
   full_name: string;
   phone_number: string;
   address_line: string;
-  landmark: string;
+  landmark?: string;      // ✅ ADD THIS
   city: string;
   pincode: string;
   latitude?: number;
@@ -62,8 +73,6 @@ const Profile = () => {
   // ==============================
   const fetchData = async () => {
 
-    if (!user) return;
-
     let isMounted = true;
 
     try {
@@ -74,10 +83,18 @@ const Profile = () => {
         apiRequest(`/users/profile/`),
         apiRequest(`/orders/addresses/`),
       ]);
-
+       
+console.log("PROFILE DATA:", profileData);
       if (!isMounted) return;
 
-      setProfile(profileData || null);
+      const user = profileData.user;
+
+setProfile({
+  id: user.id,
+  full_name: user.username || "",
+  email: user.email,
+  phone: user.phone || "",
+});
 
       if (Array.isArray(addressData?.results)) {
         setAddresses(addressData.results);
@@ -103,85 +120,126 @@ const Profile = () => {
   };
 
   useEffect(() => {
-    if (user) {
-      fetchData();
-    }
-  }, [user]);
+  fetchData();
+}, []);
 
   // ==============================
   // ➕ ADD ADDRESS
   // ==============================
-  const handleAddAddress = async () => {
+ const handleAddAddress = async () => {
+  if (saving) return;
 
-    if (saving) return;
+  // ✅ REQUIRED FIELD VALIDATION
+  if (
+    !newAddress.full_name?.trim() ||
+    !newAddress.phone_number?.trim() ||
+    !newAddress.address_line?.trim() ||
+    !newAddress.city?.trim() ||
+    !String(newAddress.pincode)?.trim()
+  ) {
+    alert("Fill all fields");
+    return;
+  }
 
-    if (
-      !newAddress.full_name?.trim() ||
-      !newAddress.phone_number?.trim() ||
-      !newAddress.address_line?.trim() ||
-      !newAddress.city?.trim() ||
-      !newAddress.pincode?.trim()
-    ) {
-      alert("Fill all fields");
-      return;
+  // ✅ CLEAN PHONE NUMBER
+  const cleanedPhone = newAddress.phone_number.replace(/\D/g, "");
+
+  if (!/^\d{10,15}$/.test(cleanedPhone)) {
+    alert("Enter valid phone number (10–15 digits)");
+    return;
+  }
+
+  // 🔥 SAFE LAT/LNG NORMALIZATION
+  const latRaw = newAddress.latitude;
+  const lngRaw = newAddress.longitude;
+
+  let latitude = Array.isArray(latRaw)
+    ? Number(latRaw[0])
+    : Number(latRaw);
+
+  let longitude = Array.isArray(lngRaw)
+    ? Number(lngRaw[0])
+    : Number(lngRaw);
+
+  // ❗ STRICT CHECK
+  if (
+    latitude === undefined ||
+    longitude === undefined ||
+    Number.isNaN(latitude) ||
+    Number.isNaN(longitude)
+  ) {
+    alert("Invalid location selected");
+    return;
+  }
+
+  // 🔥🔥 FINAL FIX (IMPORTANT — THIS SOLVES YOUR ERROR)
+  latitude = Number(latitude.toFixed(8));
+  longitude = Number(longitude.toFixed(8));
+
+  try {
+    setSaving(true);
+
+    const payload = {
+      full_name: newAddress.full_name.trim(),
+      phone_number: cleanedPhone,
+      address_line: newAddress.address_line.trim(),
+      landmark: newAddress.landmark?.trim() || "",
+      city: newAddress.city.trim(),
+
+      // ✅ KEEP STRING
+      pincode: String(newAddress.pincode).trim(),
+
+      // 🔥 FIXED VALUES
+      latitude,
+      longitude,
+    };
+
+    // 🔍 DEBUG
+    console.log("FINAL PAYLOAD:", payload);
+    console.log("LAT:", latitude);
+    console.log("LNG:", longitude);
+
+    if (editingId) {
+      await apiRequest(`/orders/addresses/${editingId}/`, "PUT", payload);
+    } else {
+      await apiRequest(`/orders/addresses/`, "POST", payload);
     }
 
-    if (!newAddress.latitude || !newAddress.longitude) {
-      alert("Select location on map");
-      return;
-    }
+    // ✅ RESET FORM
+    setShowForm(false);
 
-    try {
+    setNewAddress({
+      full_name: "",
+      phone_number: "",
+      address_line: "",
+      landmark: "",
+      city: "",
+      pincode: "",
+      latitude: 0,
+      longitude: 0,
+    });
 
-      setSaving(true);
+    setEditingId(null);
 
-      if (editingId) {
-  await apiRequest(`/orders/addresses/${editingId}/`, "PUT", {
-    ...newAddress,
-    latitude: Number(newAddress.latitude),
-    longitude: Number(newAddress.longitude),
-  });
-} else {
-  await apiRequest(`/orders/addresses/`, "POST", {
-    ...newAddress,
-    latitude: Number(newAddress.latitude),
-    longitude: Number(newAddress.longitude),
-  });
-}
+    await fetchData();
 
-      setShowForm(false);
+  } catch (err: any) {
+    console.error("FULL ERROR:", err);
+    console.error("BACKEND ERROR DATA:", err?.response?.data);
 
-     setNewAddress({
-  full_name: "",
-  phone_number: "",
-  address_line: "",
-  landmark: "",
-  city: "",
-  pincode: "",
-  latitude: 0,
-  longitude: 0,
-});
+    const msg =
+      typeof err?.response?.data === "object"
+        ? JSON.stringify(err.response.data, null, 2)
+        : err?.response?.data ||
+          err?.message ||
+          "Failed to add address";
 
-setEditingId(null);
+    alert(msg);
 
-      await fetchData();
-
-     } catch (err: any) {
-  console.error(" Add address error:", err);
-
-  const msg =
-    err?.response?.data?.detail ||
-    err?.response?.data?.message ||
-    err?.message ||
-    "Failed to add address";
-
-  alert(msg);
-
-} finally {
-  setSaving(false);
-}
-  };
-
+  } finally {
+    setSaving(false);
+  }
+};
   // ==============================
   // ❌ DELETE ADDRESS
   // ==============================
@@ -205,20 +263,22 @@ setEditingId(null);
   if (loading) return <div className="p-10 text-center">Loading...</div>;
 const handleEdit = (addr: Address) => {
   setEditingId(addr.id);
+
+  // 🔥 ADD THIS LINE
   setShowForm(true);
 
   setNewAddress({
     full_name: addr.full_name,
     phone_number: (addr as any).phone_number || "",
     address_line: addr.address_line,
-    landmark: "",
+    landmark: (addr as any).landmark || "",
     city: addr.city,
     pincode: addr.pincode,
-    latitude: (addr as any).latitude || 0,
-    longitude: (addr as any).longitude || 0,
+
+    latitude: Number((addr as any).latitude),
+    longitude: Number((addr as any).longitude),
   });
 };
-
   return (
 
     <div className="min-h-screen bg-[#f3e5d8] py-10 px-6">
@@ -228,11 +288,15 @@ const handleEdit = (addr: Address) => {
         <div className="p-8 text-center bg-white shadow-xl rounded-3xl">
 
           <div className="w-24 h-24 mx-auto bg-[#d7ccc8] rounded-full flex items-center justify-center text-3xl font-bold">
-            {profile?.username?.charAt(0) || "U"}
+            {(profile?.full_name || profile?.email || "U").charAt(0).toUpperCase()}
           </div>
 
           <h1 className="mt-4 text-2xl font-bold">
-            {profile?.username}
+           {profile?.full_name 
+  ? profile.full_name 
+  : profile?.email 
+    ? profile.email.split("@")[0] 
+    : "User"}
           </h1>
 
           <p>{profile?.email}</p>
@@ -313,11 +377,13 @@ const handleEdit = (addr: Address) => {
     />
 
     <input
-      className="w-full p-2 bg-gray-100 border rounded"
-      placeholder="Address Line"
-      value={newAddress.address_line || ""}
-      readOnly
-    />
+  className="w-full p-2 border rounded"
+  placeholder="Address Line"
+  value={newAddress.address_line || ""}
+  onChange={(e) =>
+    setNewAddress({ ...newAddress, address_line: e.target.value })
+  }
+/>
 
     <input
       className="w-full p-2 border rounded"
@@ -329,27 +395,42 @@ const handleEdit = (addr: Address) => {
     />
 
     <input
-      className="w-full p-2 bg-gray-100 border rounded"
-      placeholder="City"
-      value={newAddress.city || ""}
-      readOnly
-    />
+  className="w-full p-2 border rounded"
+  placeholder="City"
+  value={newAddress.city || ""}
+  onChange={(e) =>
+    setNewAddress({ ...newAddress, city: e.target.value })
+  }
+/>
 
-    <input
-      className="w-full p-2 bg-gray-100 border rounded"
-      placeholder="Pincode"
-      value={newAddress.pincode || ""}
-      readOnly
-    />
+<input
+  className="w-full p-2 border rounded"
+  placeholder="Pincode"
+  value={newAddress.pincode || ""}
+  onChange={(e) =>
+    setNewAddress({ ...newAddress, pincode: e.target.value })
+  }
+/>
 
-    <MapPicker
-      setCoords={(c: Partial<AddressForm>) => {
-        setNewAddress((prev) => ({
-          ...prev,
-          ...c,
-        }));
-      }}
-    />
+   <MapPicker
+  latitude={newAddress.latitude}
+  longitude={newAddress.longitude}
+  setCoords={(c: Partial<AddressForm>) => {
+    setNewAddress((prev: AddressForm) => ({
+      ...prev,
+      latitude: c.latitude ?? prev.latitude,
+      longitude: c.longitude ?? prev.longitude,
+
+      // 🔥 FIXED (use ?? not ||)
+      address_line: c.address_line ?? prev.address_line,
+      city: c.city ?? prev.city,
+      pincode: c.pincode ?? prev.pincode,
+
+      // 🔥 THIS WAS MISSING
+      landmark: c.landmark ?? prev.landmark,
+    }));
+  }}
+/>
 
     <button
       onClick={handleAddAddress}

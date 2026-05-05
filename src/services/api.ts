@@ -87,7 +87,7 @@ export function useApi() {
       const options: RequestInit = {
         method,
         headers,
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(150000),
       };
 
       if (body) {

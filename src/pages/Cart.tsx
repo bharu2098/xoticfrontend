@@ -265,126 +265,175 @@ export default function Cart() {
   // 🔄 UPDATE QUANTITY
   // ==============================
   const updateQuantity = async (id: number, quantity: number) => {
+  if (quantity < 1) return;
 
-    if (quantity < 1) return;
+  try {
+    const res = await authFetch(`${API_BASE}/cart/items/${id}/update/`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quantity }),
+    });
 
-    try {
-
-      const res = await authFetch(`${API_BASE}/cart/items/${id}/update/`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quantity }),
-      });
-
-      if (!res || !res.ok) {
-        alert("Failed to update quantity");
-        return;
-      }
-
-      fetchCart();
-
-    } catch (err) {
-
-      console.error(" Update quantity error:", err);
-      alert("Error updating quantity");
-
-    }
-
-  };
-
-  // ==============================
-  // 💳 CHECKOUT
-  // ==============================
-  const handleCheckout = async () => {
-
-    if (!selectedAddress) {
-      alert("Select address");
+    if (!res || !res.ok) {
+      alert("Failed to update quantity");
       return;
     }
 
-    if (loading) return;
+    await fetchCart();
 
-    try {
+  } catch (err) {
+    console.error("Update quantity error:", err);
+    alert("Error updating quantity");
+  }
+};
 
-      setLoading(true);
+const handleCheckout = async () => {
 
-      const res = await authFetch(`${API_BASE}/orders/checkout/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address_id: selectedAddress,
-          coupon_code: coupon || null,
-          payment_method: paymentMethod,
-        }),
-      });
+  if (!selectedAddress) {
+    alert("Select address");
+    return;
+  }
 
-      if (!res) {
-        alert("Authentication error");
-        return;
-      }
+  if (loading) return;
 
-      const data = await res.json();
-      console.log("CHECKOUT RESPONSE:", data);
+  try {
+    setLoading(true);
 
-      if (!res.ok) {
-        alert(data?.error || "Checkout failed");
-        return;
-      }
+    console.log("🔥 PAYMENT METHOD SENT:", paymentMethod);
 
-      if (data.payment_type === "ONLINE") {
+    const res = await authFetch(`${API_BASE}/orders/checkout/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        address_id: selectedAddress,
+        coupon_code: coupon || null,
+        payment_method: paymentMethod,
+      }),
+    });
 
-        const rzp = new (window as any).Razorpay({
-          key: data.key,
-          amount: data.amount,
-          currency: data.currency,
-          order_id: data.razorpay_order_id,
-
-          name: "Xotic",
-          description: "Order Payment",
-
-          handler: async (response: any) => {
-
-            await authFetch(`${API_BASE}/orders/payment/verify/`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                order_id: data.order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_signature: response.razorpay_signature,
-              }),
-            });
-
-            alert("Payment successful!");
-            window.location.href = "/orders";
-          },
-
-          modal: {
-            ondismiss: () => alert("Payment cancelled"),
-          },
-        });
-
-        rzp.open();
-
-      } else {
-
-        alert("Order placed successfully!");
-        window.location.href = "/orders";
-
-      }
-
-    } catch (err) {
-
-      console.error(" Checkout error:", err);
-      alert("Checkout failed");
-
-    } finally {
-
-      setLoading(false);
-
+    if (!res) {
+      alert("Authentication error");
+      return;
     }
 
+    const data = await res.json();
+    console.log("🔥 CHECKOUT RESPONSE:", data);
+
+    // ================= ERROR HANDLING =================
+    if (!res.ok && data?.error !== "PENDING") {
+      console.error("Checkout error:", data);
+      alert(data?.error || "Checkout failed");
+      return;
+    }
+
+    // ================= ONLINE FLOW =================
+if (data?.payment_type === "ONLINE") {
+
+  console.log("✅ Opening Razorpay with:", data);
+
+  const options = {
+    key: data.key,
+    amount: data.amount,
+    currency: data.currency,
+    order_id: data.razorpay_order_id,
+
+    name: "Xotic",
+    description: "Order Payment",
+
+    prefill: {
+      name: data.user_name || "",
+      email: data.user_email || "",
+      contact: data.user_phone || "",
+    },
+
+    theme: { color: "#3399cc" },
+
+    // ✅ SUCCESS HANDLER
+    handler: async (response: any) => {
+      try {
+        const verifyRes = await authFetch(
+          `${API_BASE}/orders/payment/verify/`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_signature: response.razorpay_signature,
+            }),
+          }
+        );
+
+        const verifyData = await verifyRes?.json();
+
+        if (!verifyRes || !verifyRes.ok) {
+          console.error("Verify error:", verifyData);
+          alert("Payment verification failed");
+          return;
+        }
+
+        alert("Payment successful 🎉");
+
+        // ✅ redirect after success
+        setTimeout(() => {
+          window.location.href = "/orders";
+        }, 300);
+
+      } catch (err) {
+        console.error("Verification error:", err);
+        alert("Payment verification failed");
+      }
+    },
+
+    // 🔥 CRITICAL FIX (YOU WERE MISSING THIS)
+    modal: {
+      ondismiss: async () => {
+        console.log("❌ Payment cancelled");
+
+        try {
+          await authFetch(`${API_BASE}/orders/payment/failed/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              order_id: data.order_id, // ⚠️ backend must send this
+            }),
+          });
+        } catch (err) {
+          console.error("Cancel update failed:", err);
+        }
+      }
+    },
   };
+
+  const rzp = new (window as any).Razorpay(options);
+  rzp.open();
+  return;
+}
+
+
+// ================= COD FLOW =================
+if (data?.payment_type === "COD") {
+  alert("Order placed successfully 🎉");
+
+  setTimeout(() => {
+    window.location.href = "/orders";
+  }, 300);
+
+  return;
+}
+
+
+// ================= UNKNOWN RESPONSE =================
+console.error("❌ INVALID CHECKOUT RESPONSE:", data);
+alert("Payment initialization failed");
+
+  } catch (err) {
+    console.error("Checkout error:", err);
+    alert("Checkout failed");
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
 
