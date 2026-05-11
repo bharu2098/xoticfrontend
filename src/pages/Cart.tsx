@@ -326,98 +326,286 @@ const handleCheckout = async () => {
       return;
     }
 
-    // ================= ONLINE FLOW =================
+   // ================= ONLINE FLOW =================
 if (data?.payment_type === "ONLINE") {
 
-  console.log("✅ Opening Razorpay with:", data);
+  console.log(
+    "✅ OPENING RAZORPAY:",
+    data
+  );
+
+  // =====================================
+  // ✅ CHECK SCRIPT
+  // =====================================
+  if (!(window as any).Razorpay) {
+
+    console.error(
+      "❌ Razorpay SDK not loaded"
+    );
+
+    alert(
+      "Razorpay SDK failed to load"
+    );
+
+    return;
+  }
 
   const options = {
+
     key: data.key,
+
     amount: data.amount,
+
     currency: data.currency,
+
     order_id: data.razorpay_order_id,
 
     name: "Xotic",
+
     description: "Order Payment",
 
     prefill: {
-      name: data.user_name || "",
-      email: data.user_email || "",
-      contact: data.user_phone || "",
+
+      name:
+        data.user_name || "",
+
+      email:
+        data.user_email || "",
+
+      contact:
+        data.user_phone || "",
     },
 
-    theme: { color: "#3399cc" },
+    theme: {
+      color: "#3399cc"
+    },
 
-    // ✅ SUCCESS HANDLER
-    handler: async (response: any) => {
+    // =====================================
+    // ✅ PAYMENT SUCCESS
+    // =====================================
+    handler: async function (
+      response: any
+    ) {
+
+      console.log(
+        "🔥 FULL RAZORPAY RESPONSE:",
+        response
+      );
+
+      console.log(
+        "🔥 PAYMENT ID:",
+        response?.razorpay_payment_id
+      );
+
+      console.log(
+        "🔥 ORDER ID:",
+        response?.razorpay_order_id
+      );
+
+      console.log(
+        "🔥 SIGNATURE:",
+        response?.razorpay_signature
+      );
+
       try {
-        const verifyRes = await authFetch(
-          `${API_BASE}/orders/payment/verify/`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_signature: response.razorpay_signature,
-            }),
-          }
-        );
 
-        const verifyData = await verifyRes?.json();
+        // =====================================
+        // ❌ INVALID RESPONSE
+        // =====================================
+        if (
+          !response?.razorpay_payment_id ||
+          !response?.razorpay_order_id ||
+          !response?.razorpay_signature
+        ) {
 
-        if (!verifyRes || !verifyRes.ok) {
-          console.error("Verify error:", verifyData);
-          alert("Payment verification failed");
+          console.error(
+            "❌ SIGNATURE MISSING"
+          );
+
+          alert(
+            "Payment response incomplete"
+          );
+
           return;
         }
 
-        alert("Payment successful 🎉");
+        // =====================================
+        // ✅ VERIFY PAYLOAD
+        // =====================================
+        const payload = {
 
-        // ✅ redirect after success
-        setTimeout(() => {
-          window.location.href = "/orders";
-        }, 300);
+          razorpay_payment_id:
+            response.razorpay_payment_id,
 
+          razorpay_order_id:
+            response.razorpay_order_id,
+
+          razorpay_signature:
+            response.razorpay_signature,
+        };
+
+        console.log(
+          "🔥 VERIFY PAYLOAD:",
+          payload
+        );
+
+        // =====================================
+        // ✅ VERIFY PAYMENT
+        // =====================================
+        const verifyRes = await authFetch(
+
+          `${API_BASE}/orders/payment/verify/`,
+
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify(
+              payload
+            ),
+          }
+        );
+
+        if (!verifyRes) {
+
+          alert(
+            "Verification request failed"
+          );
+
+          return;
+        }
+
+        const verifyData =
+          await verifyRes.json();
+
+        console.log(
+          "🔥 VERIFY RESPONSE:",
+          verifyData
+        );
+
+        // =====================================
+        // ❌ VERIFY FAILED
+        // =====================================
+        if (!verifyRes.ok) {
+
+          console.error(
+            "❌ VERIFY FAILED:",
+            verifyData
+          );
+
+          alert(
+            verifyData?.error ||
+            "Payment verification failed"
+          );
+
+          return;
+        }
+
+       // =====================================
+// ✅ SUCCESS
+// =====================================
+console.log(
+  "✅ PAYMENT VERIFIED SUCCESSFULLY"
+);
+
+// 🔥 VERY IMPORTANT
+// Wait for websocket + DB save
+await new Promise((resolve) =>
+  setTimeout(resolve, 1500)
+);
+
+alert(
+  "Payment successful 🎉"
+);
+
+// ✅ REDIRECT AFTER VERIFY
+window.location.href =
+  "/home";
       } catch (err) {
-        console.error("Verification error:", err);
-        alert("Payment verification failed");
+
+        console.error(
+          "❌ VERIFICATION ERROR:",
+          err
+        );
+
+        alert(
+          "Payment verification failed"
+        );
       }
     },
 
-    // 🔥 CRITICAL FIX (YOU WERE MISSING THIS)
+    // =====================================
+    // ❌ PAYMENT FAILED
+    // =====================================
     modal: {
-      ondismiss: async () => {
-        console.log("❌ Payment cancelled");
+
+      ondismiss: async function () {
+
+        console.log(
+          "❌ PAYMENT CANCELLED"
+        );
 
         try {
-          await authFetch(`${API_BASE}/orders/payment/failed/`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              order_id: data.order_id, // ⚠️ backend must send this
-            }),
-          });
+
+          await authFetch(
+
+            `${API_BASE}/orders/payment/failed/`,
+
+            {
+              method: "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+
+              body: JSON.stringify({
+
+                razorpay_order_id:
+                  data.razorpay_order_id,
+
+                reason:
+                  "User cancelled payment",
+              }),
+            }
+          );
+
         } catch (err) {
-          console.error("Cancel update failed:", err);
+
+          console.error(
+            "❌ CANCEL API ERROR:",
+            err
+          );
         }
-      }
+
+        setLoading(false);
+      },
     },
   };
 
-  const rzp = new (window as any).Razorpay(options);
+  // =====================================
+  // ✅ OPEN RAZORPAY
+  // =====================================
+  const rzp = new (
+    window as any
+  ).Razorpay(options);
+
   rzp.open();
+
   return;
 }
-
 
 // ================= COD FLOW =================
 if (data?.payment_type === "COD") {
   alert("Order placed successfully 🎉");
 
   setTimeout(() => {
-    window.location.href = "/orders";
-  }, 300);
+    window.location.href = "/home";
+  }, 500);
 
   return;
 }
@@ -431,8 +619,16 @@ alert("Payment initialization failed");
     console.error("Checkout error:", err);
     alert("Checkout failed");
   } finally {
+
+  // ❌ DON'T STOP LOADING
+  // DURING ONLINE FLOW
+  if (
+    paymentMethod !== "ONLINE"
+  ) {
+
     setLoading(false);
   }
+}
 };
 
   useEffect(() => {

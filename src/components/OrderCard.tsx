@@ -1,4 +1,9 @@
-import { useState, useRef } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+} from "react";
+
 import { updateOrderStatus } from "../services/kitchenService";
 
 type OrderStatus =
@@ -13,9 +18,15 @@ type OrderStatus =
 
 interface OrderItem {
   id: number;
-  product_name: string;
+
+  product_name?: string;
+  name?: string;
+
   quantity: number;
-  total_price: number;
+
+  total_price?: number;
+  price?: number;
+  unit_price?: number;
 }
 
 interface DeliveryPartner {
@@ -25,98 +36,390 @@ interface DeliveryPartner {
 
 interface KitchenOrder {
   id: number;
-  customer_name: string;
-  total_amount: string;
+
+  customer_name?: string;
+
+  user?: {
+    username?: string;
+  };
+
+  user_name?: string;
+
+  total_amount: string | number;
+
   order_age_minutes: number;
+
+  created_at?: string;
+
   status: OrderStatus;
+
   payment_status?: string;
+
   total_items: number;
+
   items: OrderItem[];
+
   delivery_partner?: DeliveryPartner | null;
+
   pidge_order_id?: string | null;
+
   tracking_url?: string | null;
 }
 
 interface OrderCardProps {
   order: KitchenOrder;
-  refresh: () => void;
+
+  // 🚫 KEEP BUT DON'T FORCE PAGE REFRESH
+  refresh?: () => void;
 }
 
-const OrderCard = ({ order, refresh }: OrderCardProps) => {
+const OrderCard = ({
+  order,
+}: OrderCardProps) => {
 
-  const [loading, setLoading] = useState(false);
-
-  // 🔥 Freeze time when order reaches final state
-  const frozenTime = useRef(order.order_age_minutes);
-
-  const getDisplayTime = () => {
-
-    const isFinal =
-      order.status === "DELIVERED" ||
-      order.status === "COMPLETED" ||
-      order.status === "CANCELLED";
-
-    if (isFinal) {
-      return frozenTime.current;
-    }
-
-    return order.order_age_minutes;
-  };
+  const [loading, setLoading] =
+    useState(false);
 
   // ==============================
-  // ⚙️ HANDLE ACTION (SAFE)
+  // 🔥 LOCAL STATUS
   // ==============================
-  const handleAction = async (action: string) => {
+  const [localStatus, setLocalStatus] =
+    useState<OrderStatus>(
+      order.status
+    );
 
-    if (loading) return;
+  // ==============================
+  // 🔥 SYNC WS STATUS
+  // ==============================
+  useEffect(() => {
 
-    if (!order?.id) {
-      console.error("Invalid order");
+    setLocalStatus(
+      order.status
+    );
+
+  }, [order.status]);
+
+  // ==============================
+  // 🔥 LIVE TIMER
+  // ==============================
+  const [minutesAgo, setMinutesAgo] =
+    useState(
+      Number(
+        order.order_age_minutes || 0
+      )
+    );
+
+  // ==============================
+  // 🔥 FREEZE FINAL TIMER
+  // ==============================
+  const frozenTime =
+    useRef(minutesAgo);
+
+  useEffect(() => {
+
+    const finalStates = [
+      "DELIVERED",
+      "COMPLETED",
+      "CANCELLED",
+    ];
+
+    if (
+      finalStates.includes(
+        localStatus
+      )
+    ) {
+
+      frozenTime.current =
+        minutesAgo;
+
       return;
     }
 
-    try {
+    const interval =
+      setInterval(() => {
 
-      setLoading(true);
+        setMinutesAgo(
+          (prev) => prev + 1
+        );
 
-      console.log("ACTION:", action, "ORDER:", order.id);
+      }, 60000);
 
-      await updateOrderStatus(order.id, action as any);
+    return () =>
+      clearInterval(interval);
 
-      refresh();
+  }, [
+    localStatus,
+    minutesAgo,
+  ]);
 
-    } catch (error: any) {
+  const getDisplayTime = () => {
 
-      console.error("Order action error:", error);
-      alert(error?.message || "Action failed");
+    const finalStates = [
+      "DELIVERED",
+      "COMPLETED",
+      "CANCELLED",
+    ];
 
-    } finally {
+    if (
+      finalStates.includes(
+        localStatus
+      )
+    ) {
+
+      return frozenTime.current;
+
+    }
+
+    return minutesAgo;
+
+  };
+
+  // ==============================
+  // 🔥 NEXT STATUS MAP
+  // ==============================
+  const nextStatusMap: Record<
+  string,
+  OrderStatus
+> = {
+
+  // ✅ ACCEPT = CONFIRMED
+  accept: "CONFIRMED",
+
+  // ✅ START PREPARING
+  start_preparing:
+    "PREPARING",
+
+  reject: "CANCELLED",
+
+  // ✅ READY
+  ready: "READY",
+
+  // ✅ DISPATCH
+  dispatch:
+    "OUT_FOR_DELIVERY",
+
+  // ✅ DELIVERED
+  deliver: "DELIVERED",
+};
+
+  // ==============================
+  // 🔥 HANDLE ACTION
+  // ==============================
+ const handleAction = async (
+  e: React.MouseEvent<HTMLButtonElement>,
+  action: string
+) => {
+
+  // 🚫 STOP PAGE REFRESH
+  e.preventDefault();
+
+  e.stopPropagation();
+
+  // 🚫 STOP MULTIPLE CALLS
+  if (loading) {
+    return;
+  }
+
+  // 🚫 STOP FINAL STATUS ACTIONS
+  if (
+    localStatus === "DELIVERED" ||
+    localStatus === "CANCELLED"
+  ) {
+
+    return;
+  }
+
+  try {
+
+    setLoading(true);
+
+    console.log(
+      "ACTION:",
+      action,
+      "ORDER:",
+      order.id
+    );
+
+    // ==============================
+    // 🔥 FLOW VALIDATION
+    // ==============================
+
+    // ✅ ACCEPT
+    if (
+      action === "accept" &&
+      localStatus !== "PENDING"
+    ) {
+
+      alert(
+        "Order must be PENDING"
+      );
+
+      return;
+    }
+
+    // ✅ START PREPARING
+    if (
+      action === "start_preparing" &&
+      localStatus !== "CONFIRMED"
+    ) {
+
+      alert(
+        "Order must be CONFIRMED"
+      );
+
+      return;
+    }
+
+    // ✅ READY
+    if (
+      action === "ready" &&
+      localStatus !== "PREPARING"
+    ) {
+
+      alert(
+        "Order must be PREPARING"
+      );
+
+      return;
+    }
+
+    // ✅ DISPATCH
+    if (
+      action === "dispatch" &&
+      localStatus !== "READY"
+    ) {
+
+      alert(
+        "Order must be READY"
+      );
+
+      return;
+    }
+
+    // ✅ DELIVER
+    if (
+      action === "deliver" &&
+      localStatus !==
+        "OUT_FOR_DELIVERY"
+    ) {
+
+      alert(
+        "Order must be OUT FOR DELIVERY"
+      );
+
+      return;
+    }
+
+    // ==============================
+    // 🔥 API CALL
+    // ==============================
+    await updateOrderStatus(
+      order.id,
+      action as any
+    );
+
+    // ==============================
+    // 🔥 INSTANT UI UPDATE
+    // ==============================
+    if (
+      nextStatusMap[action]
+    ) {
+
+      setLocalStatus(
+        nextStatusMap[action]
+      );
+
+    }
+
+    console.log(
+      "SUCCESS:",
+      action,
+      order.id
+    );
+
+  } catch (error: any) {
+
+    console.error(
+      "Order action error:",
+      error
+    );
+
+    alert(
+
+      error?.response?.data
+        ?.error ||
+
+      error?.response?.data
+        ?.detail ||
+
+      error?.message ||
+
+      "Action failed"
+    );
+
+  } finally {
+
+    // 🔥 PREVENT DOUBLE CLICK BUG
+    setTimeout(() => {
 
       setLoading(false);
 
-    }
-  };
+    }, 1000);
 
-  const isUrgent = Number(order.order_age_minutes) > 20;
+  }
 
-  const statusColor: Record<OrderStatus, string> = {
-    PENDING: "bg-yellow-500",
-    CONFIRMED: "bg-blue-500",
-    PREPARING: "bg-orange-500",
-    READY: "bg-purple-500",
-    COMPLETED: "bg-green-700",
-    OUT_FOR_DELIVERY: "bg-indigo-500",
-    DELIVERED: "bg-green-600",
-    CANCELLED: "bg-red-500"
+};
+
+  // ==============================
+  // 🔥 URGENT
+  // ==============================
+  const isUrgent =
+    Number(
+      getDisplayTime()
+    ) > 20;
+
+  // ==============================
+  // 🎨 STATUS COLORS
+  // ==============================
+  const statusColor:
+    Record<
+      OrderStatus,
+      string
+    > = {
+
+    PENDING:
+      "bg-yellow-500",
+
+    CONFIRMED:
+      "bg-blue-500",
+
+    PREPARING:
+      "bg-orange-500",
+
+    READY:
+      "bg-purple-500",
+
+    COMPLETED:
+      "bg-green-700",
+
+    OUT_FOR_DELIVERY:
+      "bg-indigo-500",
+
+    DELIVERED:
+      "bg-green-600",
+
+    CANCELLED:
+      "bg-red-500",
   };
 
   return (
 
     <div
       className={`p-6 rounded-2xl border shadow-md transition hover:shadow-lg
-      ${isUrgent
-        ? "bg-[#fff3e0] border-[#ffcc80]"
-        : "bg-[#faf6f1] border-[#e6d5c3]"
+      ${
+        isUrgent
+          ? "bg-[#fff3e0] border-[#ffcc80]"
+          : "bg-[#faf6f1] border-[#e6d5c3]"
       }`}
     >
 
@@ -126,11 +429,22 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
         <div>
 
           <h2 className="text-xl font-bold text-[#4e342e]">
+
             Order #{order?.id}
+
           </h2>
 
           <p className="text-sm text-[#6d4c41]">
-            {order?.customer_name || "Customer"}
+
+            {order?.customer_name ||
+
+              order?.user
+                ?.username ||
+
+              order?.user_name ||
+
+              "Customer"}
+
           </p>
 
         </div>
@@ -138,7 +452,12 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
         <div className="text-right">
 
           <p className="text-lg font-semibold text-[#3e2723]">
-            ₹ {Number(order?.total_amount || 0).toFixed(2)}
+
+            ₹
+            {Number(
+              order?.total_amount || 0
+            ).toFixed(2)}
+
           </p>
 
           <p
@@ -148,7 +467,11 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
                 : "text-[#8d6e63]"
             }`}
           >
-            {getDisplayTime()} mins ago
+
+            {getDisplayTime()}
+            {" "}
+            mins ago
+
           </p>
 
         </div>
@@ -159,15 +482,24 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
       <div className="flex flex-wrap gap-2 mb-4">
 
         <span
-          className={`px-3 py-1 text-xs font-medium text-white rounded-full ${statusColor[order.status]}`}
+          className={`px-3 py-1 text-xs font-medium text-white rounded-full ${statusColor[localStatus]}`}
         >
-          {order.status.replace(/_/g, " ")}
+
+          {localStatus.replace(
+            /_/g,
+            " "
+          )}
+
         </span>
 
         {order.payment_status && (
+
           <span className="px-3 py-1 text-xs font-medium text-[#4e342e] bg-[#d7ccc8] rounded-full">
+
             {order.payment_status}
+
           </span>
+
         )}
 
       </div>
@@ -176,123 +508,214 @@ const OrderCard = ({ order, refresh }: OrderCardProps) => {
       <div className="pt-4 mb-4 border-t border-[#e6d5c3]">
 
         <h4 className="mb-2 font-semibold text-[#4e342e]">
-          Items ({order.total_items})
+
+          Items (
+          {order.items?.length || 0}
+          )
+
         </h4>
 
         <div className="space-y-1 text-sm text-[#5d4037]">
 
-          {Array.isArray(order.items) && order.items.map((item) => (
+          {Array.isArray(order.items) &&
+            order.items.map(
+              (item) => (
 
-            <div key={item.id} className="flex justify-between">
+                <div
+                  key={item.id}
+                  className="flex justify-between"
+                >
 
-              <span>
-                {item.product_name} × {item.quantity}
-              </span>
+                  <span>
 
-              <span>₹ {Number(item.total_price) || 0}</span>
+                    {
+                      item.product_name ||
 
-            </div>
+                      item.name ||
 
-          ))}
+                      "Item"
+                    }
+
+                    {" × "}
+
+                    {item.quantity}
+
+                  </span>
+
+                  <span>
+
+                    ₹
+                    {Number(
+
+                      item.total_price ||
+
+                      item.price ||
+
+                      item.unit_price ||
+
+                      0
+
+                    ).toFixed(0)}
+
+                  </span>
+
+                </div>
+
+              )
+            )}
 
         </div>
 
       </div>
 
-      {/* DELIVERY */}
-      {order.pidge_order_id && (
-        <div className="mb-4 text-sm text-[#6d4c41] bg-[#efebe9] p-3 rounded-lg">
-          🚚 Pidge Delivery
-
-          {order.tracking_url && (
-            <div className="mt-1">
-              <a
-                href={order.tracking_url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-blue-600 underline"
-              >
-                Track Order
-              </a>
-            </div>
-          )}
-
-        </div>
-      )}
-
-      {!order.pidge_order_id && order.delivery_partner && (
-        <div className="mb-4 text-sm text-[#6d4c41] bg-[#efebe9] p-3 rounded-lg">
-          🚚 {order.delivery_partner.name} | 📞 {order.delivery_partner.phone}
-        </div>
-      )}
-
-      {/* ACTION BUTTONS */}
+      {/* ACTIONS */}
       <div className="flex flex-wrap gap-3 mt-4">
 
-        {(order.status === "PENDING" || order.status === "CONFIRMED") && (
+        {/* PENDING */}
+        {localStatus === "PENDING" && (
+
           <>
             <button
+              type="button"
               disabled={loading}
-              onClick={() => handleAction("accept")}
+              onClick={(e) =>
+                handleAction(
+                  e,
+                  "accept"
+                )
+              }
               className="px-4 py-2 text-white bg-[#5d4037] rounded-lg hover:bg-[#4e342e]"
             >
-              {loading ? "Processing..." : "Accept"}
+
+              {loading
+                ? "Processing..."
+                : "Accept"}
+
             </button>
 
             <button
+              type="button"
               disabled={loading}
-              onClick={() => handleAction("reject")}
+              onClick={(e) =>
+                handleAction(
+                  e,
+                  "reject"
+                )
+              }
               className="px-4 py-2 text-white bg-red-500 rounded-lg hover:bg-red-600"
             >
-              {loading ? "Processing..." : "Reject"}
+
+              {loading
+                ? "Processing..."
+                : "Reject"}
+
             </button>
           </>
+
         )}
 
-        {order.status === "CONFIRMED" && (
+        {/* CONFIRMED */}
+        {localStatus ===
+          "CONFIRMED" && (
+
           <button
+            type="button"
             disabled={loading}
-            onClick={() => handleAction("preparing")}
-            className="px-4 py-2 text-white bg-[#6d4c41] rounded-lg hover:bg-[#5d4037]"
+            onClick={(e) =>
+              handleAction(
+                           e,
+                          "start_preparing"
+                    )
+            }
+            className="px-4 py-2 text-white bg-orange-500 rounded-lg hover:bg-orange-600"
           >
-            {loading ? "Processing..." : "Start Preparing"}
+
+            {loading
+              ? "Processing..."
+              : "Start Preparing"}
+
           </button>
+
         )}
 
-        {order.status === "PREPARING" && (
+        {/* PREPARING */}
+        {localStatus ===
+          "PREPARING" && (
+
           <button
+            type="button"
             disabled={loading}
-            onClick={() => handleAction("ready")}
+            onClick={(e) =>
+              handleAction(
+                e,
+                "ready"
+              )
+            }
             className="px-4 py-2 text-white bg-[#8d6e63] rounded-lg hover:bg-[#6d4c41]"
           >
-            {loading ? "Processing..." : "Mark Ready"}
+
+            {loading
+              ? "Processing..."
+              : "Mark Ready"}
+
           </button>
+
         )}
 
-        {order.status === "READY" && (
+        {/* READY */}
+        {localStatus ===
+          "READY" && (
+
           <button
+            type="button"
             disabled={loading}
-            onClick={() => handleAction("dispatch")}
+            onClick={(e) =>
+              handleAction(
+                e,
+                "dispatch"
+              )
+            }
             className="px-4 py-2 text-white bg-green-700 rounded-lg hover:bg-green-800"
           >
-            {loading ? "Processing..." : "Dispatch Order"}
+
+            {loading
+              ? "Processing..."
+              : "Dispatch Order"}
+
           </button>
+
         )}
 
-        {order.status === "OUT_FOR_DELIVERY" && (
+        {/* OUT FOR DELIVERY */}
+        {localStatus ===
+          "OUT_FOR_DELIVERY" && (
+
           <button
+            type="button"
             disabled={loading}
-            onClick={() => handleAction("deliver")}
+            onClick={(e) =>
+              handleAction(
+                e,
+                "deliver"
+              )
+            }
             className="px-4 py-2 text-white bg-black rounded-lg hover:bg-gray-800"
           >
-            {loading ? "Processing..." : "Delivered"}
+
+            {loading
+              ? "Processing..."
+              : "Delivered"}
+
           </button>
+
         )}
 
       </div>
 
     </div>
+
   );
+
 };
 
 export default OrderCard;
