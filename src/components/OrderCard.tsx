@@ -77,8 +77,12 @@ const OrderCard = ({
   order,
 }: OrderCardProps) => {
 
-  const [loading, setLoading] =
-    useState(false);
+  const [
+  loadingAction,
+  setLoadingAction
+] = useState<string | null>(
+  null
+);
 
   // ==============================
   // 🔥 LOCAL STATUS
@@ -90,90 +94,144 @@ const OrderCard = ({
 
   // ==============================
   // 🔥 SYNC WS STATUS
-  // ==============================
-  useEffect(() => {
+useEffect(() => {
 
-    setLocalStatus(
-      order.status
-    );
+  setLocalStatus(
+    order.status
+  );
 
-  }, [order.status]);
+  // =================================
+  // 🛑 FREEZE FINAL TIMER
+  // =================================
+  if (
 
-  // ==============================
+  order.status ===
+    "DELIVERED" ||
+
+  order.status ===
+    "COMPLETED" ||
+
+  order.status ===
+    "CANCELLED"
+
+) {
+
+  // =================================
+  // 🛑 FREEZE ONLY ONCE
+  // =================================
+  if (
+    frozenMinutes.current === 0
+  ) {
+
+    frozenMinutes.current =
+      minutesAgo;
+  }
+
+  return;
+}
+  
+
+  setMinutesAgo(
+    Number(
+      order.order_age_minutes || 0
+    )
+  );
+
+}, [
+  order.status,
+  order.order_age_minutes
+]);
+useEffect(() => {
+
+  setLoadingAction(null);
+
+}, [localStatus]);
+ // ==============================
+// 🔥 LIVE TIMER (FIXED)
+// ==============================
+// ==============================
+// 🔥 LIVE TIMER
+// ==============================
+const [minutesAgo, setMinutesAgo] =
+  useState(
+    Number(
+      order.order_age_minutes || 0
+    )
+  );
+
+// ==============================
+// 🛑 FREEZE FINAL TIME
+// ==============================
+const frozenMinutes =
+  useRef(0);
+// ==============================
+// 🔥 UPDATE TIMER
+// ==============================
+useEffect(() => {
+
+  // =================================
+  // 🛑 STOP TIMER
+  // =================================
+  if (
+
+    localStatus ===
+      "DELIVERED" ||
+
+    localStatus ===
+      "COMPLETED" ||
+
+    localStatus ===
+      "CANCELLED"
+
+  ) {
+
+    return;
+  }
+
+  const interval =
+    setInterval(() => {
+
+      setMinutesAgo(
+        (prev) => prev + 1
+      );
+
+    }, 60000);
+
+  return () =>
+    clearInterval(interval);
+
+}, [localStatus]);
+
+// ==============================
+// 🔥 DISPLAY TIMER
+
+// ==============================
+const getDisplayTime = () => {
+
+  // =================================
+  // 🛑 FINAL FROZEN TIME
+  // =================================
+  if (
+
+    localStatus ===
+      "DELIVERED" ||
+
+    localStatus ===
+      "COMPLETED" ||
+
+    localStatus ===
+      "CANCELLED"
+
+  ) {
+
+    return `${frozenMinutes.current} mins`;
+  }
+
+  // =================================
   // 🔥 LIVE TIMER
-  // ==============================
-  const [minutesAgo, setMinutesAgo] =
-    useState(
-      Number(
-        order.order_age_minutes || 0
-      )
-    );
-
-  // ==============================
-  // 🔥 FREEZE FINAL TIMER
-  // ==============================
-  const frozenTime =
-    useRef(minutesAgo);
-
-  useEffect(() => {
-
-    const finalStates = [
-      "DELIVERED",
-      "COMPLETED",
-      "CANCELLED",
-    ];
-
-    if (
-      finalStates.includes(
-        localStatus
-      )
-    ) {
-
-      frozenTime.current =
-        minutesAgo;
-
-      return;
-    }
-
-    const interval =
-      setInterval(() => {
-
-        setMinutesAgo(
-          (prev) => prev + 1
-        );
-
-      }, 60000);
-
-    return () =>
-      clearInterval(interval);
-
-  }, [
-    localStatus,
-    minutesAgo,
-  ]);
-
-  const getDisplayTime = () => {
-
-    const finalStates = [
-      "DELIVERED",
-      "COMPLETED",
-      "CANCELLED",
-    ];
-
-    if (
-      finalStates.includes(
-        localStatus
-      )
-    ) {
-
-      return frozenTime.current;
-
-    }
-
-    return minutesAgo;
-
-  };
-
+  // =================================
+  return `${minutesAgo} mins ago`;
+};
   // ==============================
   // 🔥 NEXT STATUS MAP
   // ==============================
@@ -216,9 +274,10 @@ const OrderCard = ({
   e.stopPropagation();
 
   // 🚫 STOP MULTIPLE CALLS
-  if (loading) {
-    return;
-  }
+if (loadingAction) {
+  return;
+}
+  
 
   // 🚫 STOP FINAL STATUS ACTIONS
   if (
@@ -231,7 +290,7 @@ const OrderCard = ({
 
   try {
 
-    setLoading(true);
+    setLoadingAction(action);
 
     console.log(
       "ACTION:",
@@ -359,25 +418,24 @@ const OrderCard = ({
 
   } finally {
 
-    // 🔥 PREVENT DOUBLE CLICK BUG
-    setTimeout(() => {
+  setTimeout(() => {
 
-      setLoading(false);
+    setLoadingAction(null);
 
-    }, 1000);
+  }, 300);
 
-  }
+}
 
 };
 
   // ==============================
   // 🔥 URGENT
   // ==============================
-  const isUrgent =
-    Number(
-      getDisplayTime()
-    ) > 20;
-
+ const isUrgent =
+  minutesAgo > 20 &&
+  localStatus !== "DELIVERED" &&
+  localStatus !== "COMPLETED" &&
+  localStatus !== "CANCELLED";
   // ==============================
   // 🎨 STATUS COLORS
   // ==============================
@@ -460,19 +518,17 @@ const OrderCard = ({
 
           </p>
 
-          <p
-            className={`text-xs ${
-              isUrgent
-                ? "text-red-600 font-semibold"
-                : "text-[#8d6e63]"
-            }`}
-          >
+         <p
+  className={`text-xs ${
+    isUrgent
+      ? "text-red-600 font-semibold"
+      : "text-[#8d6e63]"
+  }`}
+>
 
-            {getDisplayTime()}
-            {" "}
-            mins ago
+  {getDisplayTime()}
 
-          </p>
+</p>
 
         </div>
 
@@ -576,40 +632,40 @@ const OrderCard = ({
 
           <>
             <button
-              type="button"
-              disabled={loading}
-              onClick={(e) =>
-                handleAction(
-                  e,
-                  "accept"
-                )
-              }
-              className="px-4 py-2 text-white bg-[#5d4037] rounded-lg hover:bg-[#4e342e]"
-            >
+  type="button"
+  disabled={!!loadingAction}
+  onClick={(e) =>
+    handleAction(
+      e,
+      "accept"
+    )
+  }
+  className="px-4 py-2 text-white bg-[#5d4037] rounded-lg hover:bg-[#4e342e]"
+>
 
-              {loading
-                ? "Processing..."
-                : "Accept"}
+  {loadingAction === "accept"
+    ? "Processing..."
+    : "Accept"}
 
-            </button>
+</button>
 
-            <button
-              type="button"
-              disabled={loading}
-              onClick={(e) =>
-                handleAction(
-                  e,
-                  "reject"
-                )
-              }
-              className="px-4 py-2 text-white bg-red-500 rounded-lg hover:bg-red-600"
-            >
+           <button
+  type="button"
+  disabled={!!loadingAction}
+  onClick={(e) =>
+    handleAction(
+      e,
+      "reject"
+    )
+  }
+  className="px-4 py-2 text-white bg-red-500 rounded-lg hover:bg-red-600"
+>
 
-              {loading
-                ? "Processing..."
-                : "Reject"}
+  {loadingAction === "reject"
+    ? "Processing..."
+    : "Reject"}
 
-            </button>
+</button>
           </>
 
         )}
@@ -619,22 +675,22 @@ const OrderCard = ({
           "CONFIRMED" && (
 
           <button
-            type="button"
-            disabled={loading}
-            onClick={(e) =>
-              handleAction(
-                           e,
-                          "start_preparing"
-                    )
-            }
-            className="px-4 py-2 text-white bg-orange-500 rounded-lg hover:bg-orange-600"
-          >
+  type="button"
+  disabled={!!loadingAction}
+  onClick={(e) =>
+    handleAction(
+      e,
+      "start_preparing"
+    )
+  }
+  className="px-4 py-2 text-white bg-orange-500 rounded-lg hover:bg-orange-600"
+>
 
-            {loading
-              ? "Processing..."
-              : "Start Preparing"}
+  {loadingAction === "start_preparing"
+    ? "Processing..."
+    : "Start Preparing"}
 
-          </button>
+</button>
 
         )}
 
@@ -643,23 +699,22 @@ const OrderCard = ({
           "PREPARING" && (
 
           <button
-            type="button"
-            disabled={loading}
-            onClick={(e) =>
-              handleAction(
-                e,
-                "ready"
-              )
-            }
-            className="px-4 py-2 text-white bg-[#8d6e63] rounded-lg hover:bg-[#6d4c41]"
-          >
+  type="button"
+  disabled={!!loadingAction}
+  onClick={(e) =>
+    handleAction(
+      e,
+      "ready"
+    )
+  }
+  className="px-4 py-2 text-white bg-[#8d6e63] rounded-lg hover:bg-[#6d4c41]"
+>
 
-            {loading
-              ? "Processing..."
-              : "Mark Ready"}
+  {loadingAction === "ready"
+    ? "Processing..."
+    : "Mark Ready"}
 
-          </button>
-
+</button>
         )}
 
         {/* READY */}
@@ -667,46 +722,45 @@ const OrderCard = ({
           "READY" && (
 
           <button
-            type="button"
-            disabled={loading}
-            onClick={(e) =>
-              handleAction(
-                e,
-                "dispatch"
-              )
-            }
-            className="px-4 py-2 text-white bg-green-700 rounded-lg hover:bg-green-800"
-          >
+  type="button"
+  disabled={!!loadingAction}
+  onClick={(e) =>
+    handleAction(
+      e,
+      "dispatch"
+    )
+  }
+  className="px-4 py-2 text-white bg-green-700 rounded-lg hover:bg-green-800"
+>
 
-            {loading
-              ? "Processing..."
-              : "Dispatch Order"}
+  {loadingAction === "dispatch"
+    ? "Processing..."
+    : "Dispatch Order"}
 
-          </button>
+</button>
 
         )}
 
         {/* OUT FOR DELIVERY */}
         {localStatus ===
           "OUT_FOR_DELIVERY" && (
+<button
+  type="button"
+  disabled={!!loadingAction}
+  onClick={(e) =>
+    handleAction(
+      e,
+      "deliver"
+    )
+  }
+  className="px-4 py-2 text-white bg-black rounded-lg hover:bg-gray-800"
+>
 
-          <button
-            type="button"
-            disabled={loading}
-            onClick={(e) =>
-              handleAction(
-                e,
-                "deliver"
-              )
-            }
-            className="px-4 py-2 text-white bg-black rounded-lg hover:bg-gray-800"
-          >
+  {loadingAction === "deliver"
+    ? "Processing..."
+    : "Delivered"}
 
-            {loading
-              ? "Processing..."
-              : "Delivered"}
-
-          </button>
+</button>
 
         )}
 

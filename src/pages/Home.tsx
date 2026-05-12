@@ -138,75 +138,213 @@ export default function Home() {
   // ==============================
   // 🔌 WEBSOCKET (FIXED)
   // ==============================
-  useEffect(() => {
-    if (!activeOrder?.id) return;
+// ==============================
+// 🔌 WEBSOCKET (FULLY FIXED)
+// ==============================
+useEffect(() => {
 
-    let socket: WebSocket;
+  if (!activeOrder?.id) return;
 
-    const connectSocket = async () => {
-      try {
-        const token = await getToken({ template: "default" });
+  let socket: WebSocket;
 
-        if (!token) {
-          console.warn("No Clerk token for WebSocket");
-          return;
-        }
+  const connectSocket = async () => {
 
-        socketRef.current?.close();
+    try {
 
-        socket = new WebSocket(
-          `${WS_BASE}/ws/orders/${activeOrder.id}/?token=${token}`
+      const token = await getToken({
+        template: "default",
+      });
+
+      if (!token) {
+
+        console.warn(
+          "No Clerk token for WebSocket"
         );
 
-        socketRef.current = socket;
+        return;
+      }
 
-        socket.onmessage = async (event) => {
-          try {
-            const data = JSON.parse(event.data);
+      // =================================
+      // 🔌 CLOSE OLD SOCKET
+      // =================================
+      socketRef.current?.close();
 
-            if (data.type === "location_update") {
-              setRiderLocation({
-                lat: data.latitude,
-                lng: data.longitude,
-              });
-            }
+      socket = new WebSocket(
+        `${WS_BASE}/ws/orders/${activeOrder.id}/?token=${token}`
+      );
 
-            if (data.type === "order_status") {
-              const newStatus = data.status;
+      socketRef.current = socket;
 
-              setActiveOrder((prev) =>
-                prev ? { ...prev, status: newStatus } : prev
+      // =================================
+      // ✅ OPEN
+      // =================================
+      socket.onopen = () => {
+
+        console.log(
+          "✅ CUSTOMER WS CONNECTED"
+        );
+      };
+
+      // =================================
+      // 📩 MESSAGE
+      // =================================
+      socket.onmessage = (
+        event
+      ) => {
+
+        try {
+
+          const data = JSON.parse(
+            event.data
+          );
+
+          console.log(
+            "🔥 CUSTOMER WS:",
+            data
+          );
+
+          // =============================
+          // 📍 LIVE LOCATION
+          // =============================
+          if (
+            data.type ===
+            "location_update"
+          ) {
+
+            setRiderLocation({
+
+              lat:
+                data.latitude,
+
+              lng:
+                data.longitude,
+            });
+
+            return;
+          }
+
+          // =============================
+          // 🔥 ORDER STATUS
+          // =============================
+          if (
+            data.type ===
+            "order_status"
+          ) {
+
+            const newStatus =
+
+  data.status ||
+
+  data.order?.status ||
+
+  "";
+
+            console.log(
+              "🔥 NEW STATUS:",
+              newStatus
+            );
+
+            // =========================
+            // ⚡ INSTANT UI UPDATE
+            // =========================
+            setActiveOrder(
+              (prev) => {
+
+                if (!prev) {
+                  return prev;
+                }
+
+                return {
+
+                  ...prev,
+
+                  status:
+                    newStatus,
+                };
+              }
+            );
+
+            // =========================
+            // 🛑 FINAL STATES
+            // =========================
+            if (
+
+              newStatus ===
+                "DELIVERED" ||
+
+              newStatus ===
+                "COMPLETED"
+
+            ) {
+
+              setActiveOrder(
+                null
               );
 
-              await fetchActiveOrder();
+              setTimeLeft(0);
 
-              if (
-                newStatus === "DELIVERED" ||
-                newStatus === "COMPLETED"
-              ) {
-                setActiveOrder(null);
-                setTimeLeft(0);
-                setEndTime(null);
-                setRiderLocation(null);
-                socket.close();
-              }
+              setEndTime(null);
+
+              setRiderLocation(
+                null
+              );
+
+              socket.close();
             }
-          } catch (err) {
-            console.error(" Websocket parse error", err);
           }
-        };
-      } catch (err) {
-        console.error(" WebSocket connection failed", err);
-      }
-    };
 
-    connectSocket();
+        } catch (err) {
 
-    return () => {
-      socketRef.current?.close();
-    };
-  }, [activeOrder?.id]);
+          console.error(
+            "❌ WS parse error:",
+            err
+          );
+        }
+      };
 
+      // =================================
+      // ❌ ERROR
+      // =================================
+      socket.onerror = (
+        err
+      ) => {
+
+        console.error(
+          "❌ CUSTOMER WS ERROR:",
+          err
+        );
+      };
+
+      // =================================
+      // 🔌 CLOSE
+      // =================================
+      socket.onclose = () => {
+
+        console.log(
+          "❌ CUSTOMER WS CLOSED"
+        );
+      };
+
+    } catch (err) {
+
+      console.error(
+        "❌ WS CONNECTION FAILED:",
+        err
+      );
+    }
+  };
+
+  connectSocket();
+
+  return () => {
+
+    socketRef.current?.close();
+  };
+
+}, [
+  activeOrder?.id,
+  getToken
+]);
   // ==============================
   // 🔍 FILTER
   // ==============================
@@ -251,7 +389,16 @@ return (
           <p>{activeOrder.kitchen}</p>
 
           <p>
-            Status: <b>{activeOrder.status.replace(/_/g, " ")}</b>
+            Status: <b>{
+
+  (
+    activeOrder?.status ||
+
+    "PENDING"
+
+  ).replace(/_/g, " ")
+
+}</b>
           </p>
 
           {activeOrder.status === "OUT_FOR_DELIVERY" && (

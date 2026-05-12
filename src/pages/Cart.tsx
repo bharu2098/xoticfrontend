@@ -48,6 +48,10 @@ export default function Cart() {
   });
 
   const [addresses, setAddresses] = useState<Address[]>([]);
+  const [
+  addressLoading,
+  setAddressLoading
+] = useState(true);
   const [selectedAddress, setSelectedAddress] = useState<number | null>(null);
 
   const [coupon, setCoupon] = useState("");
@@ -62,51 +66,70 @@ export default function Cart() {
   const [pageLoading, setPageLoading] = useState(true);
 
   // ==============================
-  // 🔐 AUTH FETCH (FIXED ONLY HERE)
-  // ==============================
-  const authFetch = useCallback(async (url: string, options: RequestInit = {}) => {
+// 🔐 AUTH FETCH (FAST)
+// ==============================
+const authFetch = useCallback(
 
-    if (!isLoaded || !isSignedIn) return null;
+  async (
+    url: string,
+    options: RequestInit = {}
+  ) => {
 
-    let token: string | null = null;
+    if (
+      !isLoaded ||
+      !isSignedIn
+    ) {
 
-    // ✅ retry for Clerk stability
-    for (let i = 0; i < 3; i++) {
-      try {
-        token = await getToken({ template: "default" });
-        if (token) break;
-      } catch (err) {
-        console.warn("Token retry...");
-        await new Promise((r) => setTimeout(r, 100));
-      }
-    }
-
-    if (!token) {
-      console.warn("No Clerk token found");
       return null;
     }
 
     try {
 
-      const res = await fetch(url, {
+      const token =
+        await getToken({
+          template: "default",
+        });
+
+      if (!token) {
+
+        console.warn(
+          "❌ No Clerk token"
+        );
+
+        return null;
+      }
+
+      return await fetch(url, {
+
         ...options,
+
         headers: {
+
           ...(options.headers || {}),
-          Authorization: `Bearer ${token}`,
+
+          Authorization:
+            `Bearer ${token}`,
         },
       });
 
-      return res;
-
     } catch (err) {
 
-      console.error(" Auth fetch failed:", err);
-      return null;
+      console.error(
+        "❌ Auth fetch failed:",
+        err
+      );
 
+      return null;
     }
 
-  }, [getToken, isLoaded, isSignedIn]);
+  },
 
+  [
+    getToken,
+    isLoaded,
+    isSignedIn
+  ]
+);
   // ==============================
   // 📦 FETCH CART
   // ==============================
@@ -155,29 +178,122 @@ export default function Cart() {
   // ==============================
   // 📍 FETCH ADDRESSES
   // ==============================
-  const fetchAddresses = useCallback(async () => {
+ 
+const fetchAddresses = useCallback(async () => {
+
+  try {
+
+    setAddressLoading(true);
+
+    const res = await authFetch(
+      `${API_BASE}/orders/addresses/`
+    );
+
+    if (!res) {
+
+      console.warn(
+        "❌ No address response"
+      );
+
+      setAddresses([]);
+
+      return;
+    }
+
+    const text = await res.text();
+
+    let data: any;
 
     try {
 
-      const res = await authFetch(`${API_BASE}/orders/addresses/`);
-      if (!res) return;
+      data = text
+        ? JSON.parse(text)
+        : null;
 
-      const data = await res.json();
-      const list = data?.results || data?.addresses || data || [];
+    } catch {
 
-      setAddresses(list);
-
-      if (list.length > 0) {
-        setSelectedAddress(list[0].id);
-      }
-
-    } catch (err) {
-
-      console.error(" Address fetch failed", err);
-
+      data = null;
     }
 
-  }, [authFetch]);
+    console.log(
+      "🔥 ADDRESS RESPONSE:",
+      data
+    );
+
+    if (!res.ok) {
+
+      throw new Error(
+        "Failed to fetch addresses"
+      );
+    }
+
+    const list = (
+
+      data?.results ||
+
+      data?.addresses ||
+
+      data ||
+
+      []
+
+    );
+
+    // =================================
+    // ✅ FORCE ARRAY
+    // =================================
+    const safeList = Array.isArray(
+      list
+    )
+
+      ? list
+
+      : [];
+
+    console.log(
+      "✅ FINAL ADDRESSES:",
+      safeList
+    );
+
+    setAddresses(
+      safeList
+    );
+
+    // =================================
+    // ✅ AUTO SELECT
+    // =================================
+    if (
+      safeList.length > 0
+    ) {
+
+      setSelectedAddress(
+        safeList[0].id
+      );
+
+    } else {
+
+      setSelectedAddress(
+        null
+      );
+    }
+
+  } catch (err) {
+
+    console.error(
+      "❌ Address fetch failed",
+      err
+    );
+
+    setAddresses([]);
+
+    setSelectedAddress(null);
+
+  } finally {
+
+    setAddressLoading(false);
+  }
+
+}, [authFetch]);
 
   // ==============================
   // 🎟 APPLY COUPON
@@ -234,56 +350,176 @@ export default function Cart() {
 
   };
 
-  // ==============================
-  // ❌ REMOVE ITEM
-  // ==============================
-  const removeItem = async (id: number) => {
+ // ==============================
+// ❌ REMOVE ITEM (INSTANT)
+// ==============================
+const removeItem = async (
+  id: number
+) => {
 
-    try {
+  // =================================
+  // ⚡ INSTANT UI UPDATE
+  // =================================
+  setCart((prev) => {
 
-      const res = await authFetch(`${API_BASE}/cart/items/${id}/`, {
-        method: "DELETE",
-      });
+    const updatedItems =
+      prev.items.filter(
+        (item) =>
+          item.id !== id
+      );
 
-      if (!res || !res.ok) {
-        alert("Failed to remove item");
-        return;
-      }
+    const total =
+      updatedItems.reduce(
 
-      fetchCart();
+        (sum, item) =>
 
-    } catch (err) {
+          sum +
 
-      console.error(" Remove item error:", err);
-      alert("Error removing item");
+          Number(item.price) *
+            item.quantity,
 
-    }
+        0
+      );
 
-  };
+    return {
 
-  // ==============================
-  // 🔄 UPDATE QUANTITY
-  // ==============================
-  const updateQuantity = async (id: number, quantity: number) => {
-  if (quantity < 1) return;
+      ...prev,
+
+      items:
+        updatedItems,
+
+      total_amount:
+        total.toFixed(2),
+    };
+  });
 
   try {
-    const res = await authFetch(`${API_BASE}/cart/items/${id}/update/`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ quantity }),
-    });
 
-    if (!res || !res.ok) {
-      alert("Failed to update quantity");
-      return;
+    const res =
+      await authFetch(
+
+        `${API_BASE}/cart/items/${id}/`,
+
+        {
+          method: "DELETE",
+        }
+      );
+
+    if (
+      !res ||
+      !res.ok
+    ) {
+
+      throw new Error(
+        "Delete failed"
+      );
     }
 
-    await fetchCart();
+  } catch (err) {
+
+    console.error(
+      "❌ Remove item error:",
+      err
+    );
+
+    // 🔥 rollback if failed
+    fetchCart();
+  }
+};
+
+// ==============================
+// 🔄 UPDATE QUANTITY (INSTANT)
+// ==============================
+const updateQuantity = async (
+  id: number,
+  quantity: number
+) => {
+
+  if (quantity < 1) return;
+
+  // =================================
+  // ⚡ INSTANT UI UPDATE
+  // =================================
+  setCart((prev) => {
+
+    const updatedItems =
+      prev.items.map((item) =>
+
+        item.id === id
+
+          ? {
+              ...item,
+              quantity,
+            }
+
+          : item
+      );
+
+    const total =
+      updatedItems.reduce(
+
+        (sum, item) =>
+
+          sum +
+
+          Number(item.price) *
+            item.quantity,
+
+        0
+      );
+
+    return {
+
+      ...prev,
+
+      items:
+        updatedItems,
+
+      total_amount:
+        total.toFixed(2),
+    };
+  });
+
+  try {
+
+    const res =
+      await authFetch(
+
+        `${API_BASE}/cart/items/${id}/update/`,
+
+        {
+          method: "PATCH",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            quantity,
+          }),
+        }
+      );
+
+    if (
+      !res ||
+      !res.ok
+    ) {
+
+      throw new Error(
+        "Update failed"
+      );
+    }
 
   } catch (err) {
-    console.error("Update quantity error:", err);
-    alert("Error updating quantity");
+
+    console.error(
+      "❌ Update quantity error:",
+      err
+    );
+
+    // 🔥 rollback if failed
+    fetchCart();
   }
 };
 
@@ -512,19 +748,29 @@ console.log(
   "✅ PAYMENT VERIFIED SUCCESSFULLY"
 );
 
-// 🔥 VERY IMPORTANT
-// Wait for websocket + DB save
-await new Promise((resolve) =>
-  setTimeout(resolve, 1500)
+// =====================================
+// ✅ SUCCESS
+// =====================================
+console.log(
+  "✅ PAYMENT VERIFIED SUCCESSFULLY"
 );
 
-alert(
-  "Payment successful 🎉"
+// 🔥 RESET UI FAST
+setLoading(false);
+
+// 🔥 CLEAR CART
+setCart({
+  items: [],
+  total_amount: "0.00",
+  delivery_fee: 0,
+});
+
+// 🔥 FAST REDIRECT
+window.location.replace(
+  "/home"
 );
 
-// ✅ REDIRECT AFTER VERIFY
-window.location.href =
-  "/home";
+return;
       } catch (err) {
 
         console.error(
@@ -599,17 +845,32 @@ window.location.href =
   return;
 }
 
-// ================= COD FLOW =================
-if (data?.payment_type === "COD") {
-  alert("Order placed successfully 🎉");
+// ================= COD SUCCESS =================
+if (
+  data?.payment_type === "COD"
+) {
 
-  setTimeout(() => {
-    window.location.href = "/home";
-  }, 500);
+  console.log(
+    "✅ COD SUCCESS"
+  );
+
+  // 🔥 RESET BUTTON
+  setLoading(false);
+
+  // 🔥 CLEAR CART
+  setCart({
+    items: [],
+    total_amount: "0.00",
+    delivery_fee: 0,
+  });
+
+  // 🔥 FAST REDIRECT
+  window.location.replace(
+    "/home"
+  );
 
   return;
 }
-
 
 // ================= UNKNOWN RESPONSE =================
 console.error("❌ INVALID CHECKOUT RESPONSE:", data);
@@ -685,28 +946,38 @@ return (
 
               {/* RIGHT */}
               <div className="flex flex-wrap items-center gap-3">
+<button
+  onClick={() =>
+    updateQuantity(
+      item.id,
+      item.quantity - 1
+    )
+  }
+  disabled={item.quantity <= 1}
+  className="px-3 py-1 transition bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-40"
+>
+  -
+</button>
 
-                <button
-                  onClick={() =>
-                    updateQuantity(item.id, item.quantity - 1)
-                  }
-                  className="px-2 py-1 bg-gray-200 rounded"
-                >
-                  -
-                </button>
+<span className="
+  min-w-[30px]
+  text-center
+  font-semibold
+">
+  {item.quantity}
+</span>
 
-                <span className="min-w-[20px] text-center">
-                  {item.quantity}
-                </span>
-
-                <button
-                  onClick={() =>
-                    updateQuantity(item.id, item.quantity + 1)
-                  }
-                  className="px-2 py-1 bg-gray-200 rounded"
-                >
-                  +
-                </button>
+<button
+  onClick={() =>
+    updateQuantity(
+      item.id,
+      item.quantity + 1
+    )
+  }
+  className="px-3 py-1 transition bg-gray-200 rounded hover:bg-gray-300"
+>
+  +
+</button>
 
                 <button
                   onClick={() => removeItem(item.id)}
@@ -745,22 +1016,42 @@ return (
 
         {/* ADDRESS */}
         <select
-          value={selectedAddress ?? ""}
-          onChange={(e) =>
-            setSelectedAddress(Number(e.target.value))
-          }
-          className="w-full p-2 mt-4 border rounded"
-        >
-          {addresses.length === 0 ? (
-            <option>No address found</option>
-          ) : (
-            addresses.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.full_name} - {a.city}
-              </option>
-            ))
-          )}
-        </select>
+  value={selectedAddress ?? ""}
+  onChange={(e) =>
+    setSelectedAddress(
+      Number(e.target.value)
+    )
+  }
+  className="w-full p-2 mt-4 border rounded"
+>
+
+  {addressLoading ? (
+
+    <option>
+      Loading addresses...
+    </option>
+
+  ) : addresses.length === 0 ? (
+
+    <option>
+      No address found
+    </option>
+
+  ) : (
+
+    addresses.map((a) => (
+
+      <option
+        key={a.id}
+        value={a.id}
+      >
+
+        {a.full_name} - {a.city}
+
+      </option>
+    ))
+  )}
+</select>
 
         {/* COUPON */}
         <div className="flex flex-col gap-2 mt-4 sm:flex-row">
